@@ -17,8 +17,10 @@ def to_price_series(hist: pd.DataFrame, col: str = "close") -> pd.Series:
         s = df["nav"]
     else:
         return pd.Series(dtype=float)
-    s = pd.to_numeric(s, errors="coerce").dropna()
-    idx = pd.to_datetime(df.loc[s.index, "date"]).values
+    s = pd.to_numeric(s, errors="coerce")
+    mask = s.notna() & df["date"].notna()
+    s = s[mask]
+    idx = pd.to_datetime(df.loc[mask, "date"]).values
     return pd.Series(s.values, index=idx)
 
 

@@ -152,7 +152,7 @@ def _monte_carlo_navs(returns, stress_mult: float = 2.5, days: int = 60,
     dd = nav / np.maximum.accumulate(nav, axis=0) - 1
     worst_idx = int(np.argmin(dd.min(axis=0)))
     median_idx = int(np.argsort(dd.min(axis=0))[round(n_paths * 0.5)])
-    return {"悲观路径(10%分位)": pd.Series(nav[:, worst_idx], name="蒙特卡洛悲观"),
+    return {"最差路径(最大回撤最大)": pd.Series(nav[:, worst_idx], name="蒙特卡洛最差"),
             "中位路径": pd.Series(nav[:, median_idx], name="蒙特卡洛中位")}
 
 
@@ -245,7 +245,7 @@ def stress_test_fund_with_paths(prices: pd.Series) -> tuple:
                                              days=sc["days"], drift_sign=sc["drift_sign"],
                                              seed=_stable_seed(name))
                 if mc_paths:
-                    navs[name] = mc_paths["悲观路径(10%分位)"]
+                    navs[name] = mc_paths["最差路径(最大回撤最大)"]
             else:
                 results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
                                  "修复周期(交易日)": None, "说明": "区间数据不足"}
@@ -264,7 +264,7 @@ def stress_test_fund_with_paths(prices: pd.Series) -> tuple:
         mc_paths = _monte_carlo_navs(full_ret, stress_mult=mc["stress_mult"], days=mc["days"],
                                      drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
         if mc_paths:
-            navs[name] = mc_paths["悲观路径(10%分位)"]
+            navs[name] = mc_paths["最差路径(最大回撤最大)"]
     return results, navs
 
 
@@ -290,7 +290,7 @@ def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
                                              days=sc["days"], drift_sign=sc["drift_sign"],
                                              seed=_stable_seed(name))
                 if mc_paths:
-                    navs[name] = mc_paths["悲观路径(10%分位)"]
+                    navs[name] = mc_paths["最差路径(最大回撤最大)"]
             else:
                 results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
                                  "修复周期(交易日)": None, "说明": "区间数据不足"}
@@ -310,7 +310,7 @@ def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
         mc_paths = _monte_carlo_navs(port_full, stress_mult=mc["stress_mult"], days=mc["days"],
                                      drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
         if mc_paths:
-            navs[name] = mc_paths["悲观路径(10%分位)"]
+            navs[name] = mc_paths["最差路径(最大回撤最大)"]
     return results, navs
 
 

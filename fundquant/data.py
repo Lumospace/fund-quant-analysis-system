@@ -9,6 +9,7 @@ import time
 import json
 import socket
 import hashlib
+import logging
 import warnings
 import pandas as pd
 import numpy as np
@@ -16,6 +17,7 @@ import numpy as np
 import config
 
 warnings.filterwarnings("ignore")
+logger = logging.getLogger(__name__)
 
 # 底层 HTTP 网关统一超时：AKShare 多数接口内部不带超时参数，
 # 设全局 socket 默认超时可在接口无响应时快速失败，避免线程被永久阻塞。
@@ -78,9 +80,11 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL_SECONDS, retries=3, **kwargs):
         except Exception as e:  # 接口失败，退避重试
             last = e
             time.sleep(0.6 * (i + 1))
-    # 降级：尝试读取哪怕过期的缓存
-    stale = _load_cache(key, ttl=10 ** 9)
+    # 降级：尝试读取过期缓存（最多容忍 30 天过期的数据）
+    STALE_MAX_TTL = 30 * 24 * 3600
+    stale = _load_cache(key, ttl=STALE_MAX_TTL)
     if stale is not None:
+        logger.warning("接口全部失败，返回 %s 秒内过期的缓存数据", STALE_MAX_TTL)
         return stale
     return pd.DataFrame()
 
@@ -141,10 +145,12 @@ def _clean_etf_spot(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _sina_symbol(code: str) -> str:
-    """ETF 代码 -> 新浪前缀符号（5/6开头为沪市，1/15开头为深市）。"""
+    """ETF 代码 -> 新浪前缀符号（5/6开头为沪市，8开头为北交所，其余为深市）。"""
     code = str(code)
     if code.startswith(("5", "6")):
         return "sh" + code
+    if code.startswith("8"):
+        return "bj" + code
     return "sz" + code
 
 
