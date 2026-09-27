@@ -227,11 +227,10 @@ def _fund_labels(u: pd.DataFrame):
     return u
 
 
-# 导航分组（重构后）：6 组 8 页 — 总览 / 基金分析 / 组合与定投 / 策略与风险 / 报告
 NAV_GROUPS = {
     "总览": [("数据驾驶舱", "📊")],
-    "基金分析": [("基金画像", "🔍"), ("基金比选", "⚖️")],
-    "组合与定投": [("组合构建", "🧩"), ("定投测算", "💰")],
+    "基金分析": [("基金画像", "🔍"), ("基金筛选", "⚖️"), ("基金对比", "🔄")],
+    "组合与定投": [("组合构建", "🧩"), ("大类资产配置", "🌐"), ("定投测算", "💰")],
     "策略与风险": [("策略回测对比", "📈"), ("压力测试", "🛡️")],
     "报告": [("一键量化报告", "📄")],
 }
@@ -441,7 +440,7 @@ def page_dashboard():
 
     st.markdown("---")
     st.markdown("#### 按行业/板块分类浏览")
-    q1, q2, q3 = st.columns([1, 1, 2])
+    q1, q2 = st.columns([1, 1])
     with q1:
         q_fc = st.selectbox("基金类型", config.FUND_CLASSES,
                             index=config.FUND_CLASSES.index(st.session_state.fund_class),
@@ -542,11 +541,6 @@ def page_profile():
         st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
                    "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
 
-        advice = report.generate_operation_advice(metrics, pred, st.session_state.style,
-                                                  trend, score=score)
-        st.markdown("#### 落地操作建议")
-        full_table(pd.DataFrame([{"项目": k, "内容": v} for k, v in advice.items()]))
-
     with tabs[1]:  # 走势与回撤
         c1, c2 = st.columns(2)
         with c1:
@@ -565,26 +559,6 @@ def page_profile():
         bm_p.index = pd.to_datetime(bm_p.index)
         st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], "沪深300": bm_p},
                                           "基金 vs 沪深300（归一化）"), width="stretch")
-
-        st.markdown("#### 因子 IC 时序与累计 IC")
-        fval_names = list(fval["因子"]) if fval is not None and not fval.empty else []
-        if fval_names:
-            sel = st.multiselect("选择因子", fval_names, default=fval_names[:5], key="prof_ic")
-            ic_frame = res.get("ic_ts")
-            cum_ic = res.get("cum_ic")
-            if sel and ic_frame is not None and not ic_frame.empty:
-                ic_sel = ic_frame[[c for c in sel if c in ic_frame.columns]]
-                cum_sel = cum_ic[[c for c in sel if c in cum_ic.columns]]
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch")
-                with c2:
-                    st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
-                                    width="stretch")
-                st.caption("IC 为因子值与未来 20 日收益的 Spearman 秩相关（滚动 60 日、每 10 日采样）。"
-                           "累计 IC 持续上行代表该因子方向长期稳定有效。")
-            else:
-                st.info("样本不足，无法绘制 IC 曲线。")
 
     with tabs[2]:  # AI 预测
         mc, _ = c_forecast(code, fkey, name, start, end)
@@ -709,10 +683,11 @@ def page_profile():
                 cum_sel = cum_ic[[c for c in sel if c in cum_ic.columns]]
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch")
+                    st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch",
+                                    key="prof_fac_ic_roll")
                 with c2:
                     st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
-                                    width="stretch")
+                                    width="stretch", key="prof_fac_ic_cum")
         st.markdown("---")
         st.caption("因子有效性基于滚动 IC 时序统计：IC 均值 >0 且 t 检验显著才标记为可用。"
                    "失败比例 ≥40% 预警、≥60% 已下线。")
@@ -872,7 +847,7 @@ def page_fund_analysis():
     full_table(pd.DataFrame([{"项目": k, "内容": v} for k, v in advice.items()]))
 
 
-# ==================== 页面 3：AI 走势预测 ====================
+# ==================== 页面 3（旧）：AI 走势预测（已废弃，保留引用兼容） ====================
 def page_predict():
     st.header("AI 智能走势预测")
     code, name, fkey = cur_fund()
@@ -941,7 +916,7 @@ def page_predict():
 # ==================== 页面 4：基金筛选优选 ====================
 def page_screener():
     st.header("基金筛选优选")
-    code, name, fkey = cur_fund()
+    fkey = config.FUND_CLASS_KEY[st.session_state.fund_class]
 
     if fkey == "otc":
         c1, c2 = st.columns([1, 1])
@@ -988,16 +963,16 @@ def page_screener():
         f.insert(0, "排名", range(1, len(f) + 1))
         cols = [c for c in ["code", "name", "price", "pct_chg", "amount", "流通市值", "sector"] if c in f.columns]
         st.markdown(f"共 {len(f)} 只场内ETF 实时行情（按 {sort_by} 排序前50），"
-                    f"深度指标请进入「基金深度分析」查看。")
+                    f"详细指标请进入「基金画像」查看。")
         st.dataframe(f[["排名"] + cols].rename(columns={
             "code": "代码", "name": "名称", "price": "最新价", "pct_chg": "涨跌幅%",
             "amount": "成交额", "sector": "板块"}), width="stretch", hide_index=True)
 
 
-# ==================== 页面 4.5：基金对比 ====================
+# ==================== 页面 5：基金对比 ====================
 def page_compare():
     st.header("基金横向对比")
-    code, name, fkey = cur_fund()
+    fkey = config.FUND_CLASS_KEY[st.session_state.fund_class]
     s = _universe_for(fkey)
     if s.empty:
         st.warning("数据不可用")
@@ -1118,10 +1093,11 @@ def page_compare():
                f"（{rank_df.iloc[0]['评级']}，{rank_df.iloc[0]['综合评分']} 分）")
 
 
-# ==================== 页面 5：组合优化 ====================
+# ==================== 页面 6：组合优化 ====================
 def page_portfolio():
-    st.header("投资组合量化优化（马科维茨 / 风险平价）")
-    code, name, fkey = cur_fund()
+    st.header("投资组合量化优化")
+    st.caption("马科维茨均值-方差 / 风险平价 / 目标收益等多种优化方法")
+    fkey = config.FUND_CLASS_KEY[st.session_state.fund_class]
     s = _universe_for(fkey)
     if s.empty:
         st.warning("数据不可用")
@@ -1279,7 +1255,7 @@ def page_portfolio():
             st.success(f"样本外表现最优（按夏普比率）：**{best}**")
 
 
-# ==================== 页面 5.5：大类资产配置 ====================
+# ==================== 页面 7：大类资产配置 ====================
 def page_allocation():
     st.header("大类资产配置")
     st.caption("基于 股票/债券/黄金/现金 四类代表性 ETF（沪深300 / 国债 / 黄金 / 货币）真实行情，"
@@ -1355,9 +1331,10 @@ def page_allocation():
     st.caption(config.RISK_DISCLAIMER)
 
 
-# ==================== 页面 6：定投测算 ====================
+# ==================== 页面 8：定投测算 ====================
 def page_dca():
     st.header("基金定投测算")
+    st.caption("支持固定金额、估值不定额、首笔初投等多种定投策略的历史回测")
     code, name, fkey = cur_fund()
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -1424,9 +1401,10 @@ def page_dca():
                "需结合估值与基本面判断，不适用于趋势性崩盘资产。")
 
 
-# ==================== 页面 6.5：策略回测对比 ====================
+# ==================== 页面 9：策略回测对比 ====================
 def page_backtest():
     st.header("历史回测与策略对比")
+    st.caption("双均线 / 动量 / 定投 / 买入持有 多策略横向对比，计入交易成本")
     code, name, fkey = cur_fund()
 
     c1, c2 = st.columns([1, 1])
@@ -1516,9 +1494,10 @@ def page_backtest():
     st.caption(config.RISK_DISCLAIMER)
 
 
-# ==================== 页面 7：压力测试 ====================
+# ==================== 页面 10：压力测试 ====================
 def page_stress():
     st.header("极端行情压力测试")
+    st.caption("历史情景回放 + 蒙特卡洛模拟，评估单基金或组合在极端条件下的尾部风险")
     code, name, fkey = cur_fund()
     mode = st.radio("测试对象", ["单基金", "组合"], horizontal=True)
     if mode == "单基金":
@@ -1609,9 +1588,10 @@ def page_stress():
         st.caption(tr["说明"] + "。分散化收益为正表示相关性令组合尾部损失小于各资产独立相加。")
 
 
-# ==================== 页面 8：一键报告 ====================
+# ==================== 页面 11：一键报告 ====================
 def page_report():
     st.header("一键量化分析报告")
+    st.caption("汇集基金核心指标、AI 预测、持仓穿透与操作建议，支持 HTML 导出")
     code, name, fkey = cur_fund()
     format_ = st.radio("报告格式", ["HTML", "文本摘要"], horizontal=True)
 
@@ -1661,8 +1641,10 @@ def page_report():
 PAGES = {
     "数据驾驶舱": page_dashboard,
     "基金画像": page_profile,
-    "基金比选": page_screener_compare,
+    "基金筛选": page_screener,
+    "基金对比": page_compare,
     "组合构建": page_portfolio,
+    "大类资产配置": page_allocation,
     "定投测算": page_dca,
     "策略回测对比": page_backtest,
     "压力测试": page_stress,
