@@ -492,7 +492,9 @@ def page_profile():
     with c2:
         end = st.text_input("结束日期(YYYYMMDD)", default_end(), key="prof_end")
 
+    st.session_state._status = "深度分析计算中..."
     res = c_analysis(code, fkey, name, start, end)
+    st.session_state._status = ""
     if res is None:
         st.warning("该基金历史行情为空或样本不足（可能代码有误或区间无数据）。")
         return
@@ -567,7 +569,9 @@ def page_profile():
                                           "基金 vs 沪深300（归一化）"), width="stretch")
 
     with tabs[2]:  # AI 预测
+        st.session_state._status = "多周期预测模型训练中..."
         mc, _ = c_forecast(code, fkey, name, start, end)
+        st.session_state._status = ""
         if mc:
             st.markdown(f"#### {name} 多周期涨跌概率")
             rows = []
@@ -720,7 +724,9 @@ def page_fund_analysis():
     with c2:
         end = st.text_input("结束日期(YYYYMMDD)", default_end())
 
+    st.session_state._status = "深度分析计算中..."
     res = c_analysis(code, fkey, name, start, end)
+    st.session_state._status = ""
     if res is None:
         st.warning("该基金历史行情为空或样本不足（可能代码有误或区间无数据）。")
         return
@@ -869,7 +875,9 @@ def page_fund_analysis():
 def page_predict():
     st.header("AI 智能走势预测")
     code, name, fkey = cur_fund()
+    st.session_state._status = "多周期预测模型训练中..."
     mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
+    st.session_state._status = ""
     if not mc:
         st.warning("无数据")
         return
@@ -1613,7 +1621,9 @@ def page_report():
     code, name, fkey = cur_fund()
     format_ = st.radio("报告格式", ["HTML", "文本摘要"], horizontal=True)
 
+    st.session_state._status = "深度分析计算中..."
     res = c_analysis(code, fkey, name, default_start(), default_end())
+    st.session_state._status = ""
     if res is None:
         st.warning("无数据或样本不足，无法生成报告。"); return
     prices = res["prices"]
@@ -1625,7 +1635,9 @@ def page_report():
     stress_res = stress.stress_test_fund(prices)
     advice = report.generate_operation_advice(metrics, pred, st.session_state.style,
                                               stress=stress_res, score=score)
+    st.session_state._status = "多周期预测模型训练中..."
     mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
+    st.session_state._status = ""
     holdings = c_holdings(code)
 
     if format_ == "HTML":
@@ -1680,12 +1692,21 @@ def main():
         st.session_state.horizon = "中期（1-3年）"
     if "fund_class" not in st.session_state:
         st.session_state.fund_class = "场内ETF"
+    if "_status" not in st.session_state:
+        st.session_state._status = ""
     page = sidebar()
+    _status_bar = st.sidebar.empty()
+    if st.session_state._status:
+        _status_bar.caption(f"🔄 {st.session_state._status}")
     try:
         PAGES[page]()
     except Exception as e:
         st.error(f"页面运行时出错：{e}")
         st.exception(e)
+    finally:
+        if st.session_state._status:
+            st.session_state._status = ""
+            _status_bar.empty()
 
 
 if __name__ == "__main__":
