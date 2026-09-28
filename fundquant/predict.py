@@ -57,15 +57,24 @@ def _make_dataset(X_full: pd.DataFrame, prices: pd.Series, horizon: int):
 
 
 def _fit_model(X_train: pd.DataFrame, y_train: pd.Series):
-    """训练 LightGBM 分类器，按正负样本比例温和加权处理类别不平衡。"""
+    """训练 LightGBM 分类器，按正负样本比例温和加权处理类别不平衡。
+
+    超参数按样本量自适应：n<200 从严防过拟合，n>500 充分学习。
+    """
     import lightgbm as lgb
     neg = int((y_train == 0).sum())
     pos = int((y_train == 1).sum())
-    # 仅在不平衡明显时加权，且限制在 [0.5, 2.0] 内，避免过度破坏概率校准
     scale_pos_weight = float(np.clip(neg / max(1, pos), 0.5, 2.0))
+    n = X_train.shape[0]
+    if n < 200:
+        n_est, lr, depth, leaves, min_child = 100, 0.03, 3, 8, 20
+    elif n < 500:
+        n_est, lr, depth, leaves, min_child = 150, 0.04, 3, 12, 15
+    else:
+        n_est, lr, depth, leaves, min_child = 200, 0.05, 4, 20, 10
     model = lgb.LGBMClassifier(
-        n_estimators=200, learning_rate=0.05, max_depth=3,
-        num_leaves=15, min_child_samples=20, subsample=0.8,
+        n_estimators=n_est, learning_rate=lr, max_depth=depth,
+        num_leaves=leaves, min_child_samples=min_child, subsample=0.8,
         colsample_bytree=0.8, random_state=42, verbose=-1,
         scale_pos_weight=scale_pos_weight,
     )

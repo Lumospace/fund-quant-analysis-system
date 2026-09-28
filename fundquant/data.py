@@ -19,9 +19,22 @@ import config
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
 
-# 底层 HTTP 网关统一超时：AKShare 多数接口内部不带超时参数，
-# 设全局 socket 默认超时可在接口无响应时快速失败，避免线程被永久阻塞。
-socket.setdefaulttimeout(config.HTTP_TIMEOUT)
+# 封装带超时的统一 HTTP Session，避免 socket.setdefaulttimeout 全局污染。
+import requests as _requests
+_HTTP = _requests.Session()
+_HTTP.headers.update({"User-Agent": "fund-quant/1.0"})
+
+# 保存原始 socket 超时，仅包裹 AKShare 调用（其内部不使用此 Session）
+_ORIG_SOCKET_TIMEOUT = socket.getdefaulttimeout()
+
+
+def _socket_timeout_wrapper(fn, *args, **kwargs):
+    """临时设置 socket 超时后调用 AKShare 接口，调用后恢复。"""
+    socket.setdefaulttimeout(config.HTTP_TIMEOUT)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        socket.setdefaulttimeout(_ORIG_SOCKET_TIMEOUT)
 
 
 def _cache_path(key: str) -> str:
@@ -43,7 +56,10 @@ def _load_cache(key: str, ttl: int):
 
 def _save_cache(key: str, df):
     try:
-        df.to_pickle(_cache_path(key))
+        path = _cache_path(key)
+        tmp = path + ".tmp"
+        df.to_pickle(tmp)
+        os.replace(tmp, path)
     except Exception:
         pass
 
@@ -72,7 +88,7 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL_SECONDS, retries=3, **kwargs):
     last = None
     for i in range(retries):
         try:
-            df = fn(**kwargs)
+            df = _socket_timeout_wrapper(fn, **kwargs)
             if isinstance(df, pd.DataFrame) and not df.empty:
                 _save_cache(key, df)
                 return df

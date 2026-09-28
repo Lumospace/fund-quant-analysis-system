@@ -449,3 +449,35 @@ def effective_factor_keys(prices: pd.Series, hist: pd.DataFrame,
     ok = v[v["状态"] != "已下线"]["因子"]
     name2key = {f.name: k for k, f in FACTORS.items()}
     return [name2key[n] for n in ok if n in name2key]
+
+
+def factor_correlation_matrix(prices: pd.Series, hist: pd.DataFrame,
+                               pe_hist: pd.DataFrame = None) -> pd.DataFrame:
+    """计算各因子间的 Spearman 相关系数矩阵，用于发现冗余因子对。
+
+    返回 DataFrame，index/columns 均为因子中文名。
+    """
+    ff = compute_factor_frame(prices, hist, pe_hist)
+    if ff.empty or ff.shape[1] < 2:
+        return pd.DataFrame()
+    name_map = {k: f.name for k, f in FACTORS.items()}
+    ff = ff.rename(columns=name_map)
+    return ff.corr(method="spearman")
+
+
+def high_correlation_warning(corr: pd.DataFrame, threshold: float = 0.8) -> list:
+    """检查相关系数矩阵，返回超过 threshold 的高相关因子对列表。
+
+    每项为 (因子A, 因子B, 相关系数)，按相关系数绝对值降序排列。
+    """
+    if corr is None or corr.empty:
+        return []
+    pairs = []
+    names = corr.columns.tolist()
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            v = corr.iloc[i, j]
+            if not np.isnan(v) and abs(v) >= threshold:
+                pairs.append((names[i], names[j], round(v, 3)))
+    pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+    return pairs

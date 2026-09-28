@@ -45,7 +45,11 @@ def annualized_return(prices: pd.Series) -> float:
     if len(prices) < 2:
         return 0.0
     total = cumulative_return(prices)
-    years = (len(prices) - 1) / config.TRADING_DAYS
+    if hasattr(prices, "index") and isinstance(prices.index, pd.DatetimeIndex):
+        days = (prices.index[-1] - prices.index[0]).days
+        years = max(days, 1) / 365.0
+    else:
+        years = (len(prices) - 1) / config.TRADING_DAYS
     if years <= 0:
         return 0.0
     if total <= -1:
@@ -88,7 +92,12 @@ def longest_drawdown_days(prices: pd.Series) -> int:
         return 0
     m = 0
     cur = 0
+    max_iter = len(dd) + 1
+    _iter = 0
     for v in dd:
+        _iter += 1
+        if _iter > max_iter:
+            break
         if v < 0:
             cur += 1
             m = max(m, cur)

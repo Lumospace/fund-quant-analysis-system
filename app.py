@@ -142,16 +142,21 @@ def c_analysis(code, fkey, name, start, end):
         return None
     prices = ind.to_price_series(hist)
     pe_hist = data.get_fund_pe_history(code, name)
+    if pe_hist is not None and not pe_hist.empty and "date" in pe_hist.columns:
+        pe_hist = pe_hist[(pe_hist["date"] >= pd.Timestamp(start)) &
+                          (pe_hist["date"] <= pd.Timestamp(end))]
     metrics = ind.compute_fund_metrics(hist, pe_hist=pe_hist)
     if not metrics:
         return None
     ic_ts, cum_ic = fac.ic_time_series(prices, hist, pe_hist=pe_hist)
+    fcorr = fac.factor_correlation_matrix(prices, hist, pe_hist=pe_hist)
+    fwarn = fac.high_correlation_warning(fcorr)
     return {
         "hist": hist, "prices": prices, "metrics": metrics,
         "fval": fac.validate_factors(prices, hist, pe_hist=pe_hist),
         "trend": predict.trend_signals(prices),
         "pred": predict.forecast(prices, hist, horizon=20, pe_hist=pe_hist),
-        "ic_ts": ic_ts, "cum_ic": cum_ic,
+        "ic_ts": ic_ts, "cum_ic": cum_ic, "fcorr": fcorr, "fwarn": fwarn,
     }
 
 
@@ -510,6 +515,7 @@ def page_profile():
             ("年化收益", "年化收益%"), ("最大回撤", "最大回撤%"),
             ("夏普比率", "夏普比率"), ("估值分位", "估值分位%"),
             ("年化波动率", "年化波动%"), ("近1年", "近1年%"),
+            ("索提诺比率", "索提诺比率"), ("最长回撤天数", "最长回撤修复周期"),
         ])
 
         st.markdown(f"#### 综合评分：{score['total']} 分 <span class='badge'>{score['rating']}</span> "
@@ -692,6 +698,17 @@ def page_profile():
         st.caption("因子有效性基于滚动 IC 时序统计：IC 均值 >0 且 t 检验显著才标记为可用。"
                    "失败比例 ≥40% 预警、≥60% 已下线。")
 
+        fcorr = res.get("fcorr")
+        fwarn = res.get("fwarn")
+        if fcorr is not None and not fcorr.empty and fcorr.shape[0] >= 2:
+            st.markdown("---")
+            st.markdown("#### 因子相关性矩阵（Spearman）")
+            if fwarn:
+                for a, b, v in fwarn:
+                    st.warning(f"高相关因子对：**{a}** ↔ **{b}**（ρ={v}），可能存在冗余")
+            st.plotly_chart(charts.corr_heatmap(fcorr, title="因子间 Spearman 相关系数"),
+                            width="stretch", key="prof_fac_corr")
+
 
 # ==================== 页面 2（旧）：基金深度分析（已废弃，保留引用兼容） ====================
 def page_fund_analysis():
@@ -722,6 +739,7 @@ def page_fund_analysis():
         ("年化收益", "年化收益%"), ("最大回撤", "最大回撤%"),
         ("夏普比率", "夏普比率"), ("估值分位", "估值分位%"),
         ("年化波动率", "年化波动%"), ("近1年", "近1年%"),
+        ("索提诺比率", "索提诺比率"), ("最长回撤天数", "最长回撤修复周期"),
     ])
 
     st.markdown(f"#### 综合评分：{score['total']} 分 <span class='badge'>{score['rating']}</span> "
