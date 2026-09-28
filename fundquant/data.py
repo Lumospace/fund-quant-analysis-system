@@ -78,7 +78,7 @@ def cache_mtime(key: str):
         return None
 
 
-def _call_ak(fn, key, ttl=config.CACHE_TTL_SECONDS, retries=3, **kwargs):
+def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, **kwargs):
     """统一调用封装：先读缓存 -> 调用 -> 失败重试 -> 缓存写入 -> 失败降级返回空。"""
     cached = _load_cache(key, ttl)
     if cached is not None:
@@ -127,9 +127,9 @@ def get_etf_spot(force: bool = False):
     import akshare as ak
     if force:
         clear_cache("etf_spot")
-    df = _call_ak(ak.fund_etf_spot_em, "etf_spot", ttl=config.SPOT_TTL, retries=1)
+    df = _call_ak(ak.fund_etf_spot_em, "etf_spot", ttl=config.CACHE_TTL["spot"], retries=1)
     if df is None or df.empty:
-        df = _call_ak(_etf_spot_sina, "etf_spot", ttl=config.SPOT_TTL)
+        df = _call_ak(_etf_spot_sina, "etf_spot", ttl=config.CACHE_TTL["spot"])
     return _clean_etf_spot(df)
 
 
@@ -470,7 +470,7 @@ def get_stock_industry_index(force: bool = False) -> pd.DataFrame:
 def get_otc_estimation() -> pd.DataFrame:
     """场外基金实时估值（估算净值 + 估算增长率，官方按重仓股实时行情估算）。"""
     import akshare as ak
-    df = _call_ak(ak.fund_value_estimation_em, "otc_value_est", ttl=config.SPOT_TTL, symbol="全部")
+    df = _call_ak(ak.fund_value_estimation_em, "otc_value_est", ttl=config.CACHE_TTL["spot"], symbol="全部")
     return _clean_otc_estimation(df)
 
 

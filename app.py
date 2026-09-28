@@ -86,55 +86,55 @@ def inject_css():
 
 
 # ==================== 缓存数据 ====================
-@st.cache_data(ttl=config.SPOT_TTL, show_spinner="正在拉取基金列表...")
+@st.cache_data(ttl=config.CACHE_TTL["spot"], show_spinner="正在拉取基金列表...")
 def c_fund_universe(fkey):
     return data.get_fund_universe(fkey)
 
 
-@st.cache_data(ttl=24 * 3600, show_spinner="正在拉取基金列表...", max_entries=8)
+@st.cache_data(ttl=config.CACHE_TTL["list"], show_spinner="正在拉取基金列表...", max_entries=8)
 def c_fund_list(fkey):
     """轻量基金名单（仅代码/名称/板块），长缓存供侧边栏选基，避免切模块重拉行情。"""
     return data.get_fund_list(fkey)
 
 
-@st.cache_data(ttl=config.SPOT_TTL, show_spinner="正在拉取实时估值...")
+@st.cache_data(ttl=config.CACHE_TTL["spot"], show_spinner="正在拉取实时估值...")
 def c_otc_estimation():
     return data.get_otc_estimation()
 
 
-@st.cache_data(ttl=7200, show_spinner=False, max_entries=256)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner=False, max_entries=256)
 def c_fund_hist(code, fkey, start, end):
     return data.get_fund_hist(code, fkey, start, end)
 
 
-@st.cache_data(ttl=7200, show_spinner=False, max_entries=64)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner=False, max_entries=64)
 def c_fund_rank(ftype):
     return data.get_open_fund_rank(ftype)
 
 
-@st.cache_data(ttl=12 * 3600, show_spinner=False, max_entries=256)
+@st.cache_data(ttl=config.CACHE_TTL["long"], show_spinner=False, max_entries=256)
 def c_holdings(code):
     return data.get_fund_holdings(str(code))
 
 
-@st.cache_data(ttl=12 * 3600, show_spinner="正在穿透持仓行业与风格...", max_entries=256)
+@st.cache_data(ttl=config.CACHE_TTL["long"], show_spinner="正在穿透持仓行业与风格...", max_entries=256)
 def c_lookthrough(code):
     """前十大重仓股的行业/风格穿透（内部对每只股票做元数据缓存）。"""
     return holdings.stock_lookthrough(data.get_fund_holdings(str(code)))
 
 
-@st.cache_data(ttl=7200, show_spinner=False, max_entries=16)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner=False, max_entries=16)
 def c_benchmark(name):
     return data.get_benchmark(name)
 
 
-@st.cache_data(ttl=12 * 3600, show_spinner=False, max_entries=64)
+@st.cache_data(ttl=config.CACHE_TTL["long"], show_spinner=False, max_entries=64)
 def c_fund_pe(code, name):
     """基金跟踪指数的真实 PE-TTM 历史（date, pe），未能解析时返回空。长缓存。"""
     return data.get_fund_pe_history(code, name)
 
 
-@st.cache_data(ttl=7200, show_spinner="正在计算指标与AI预测...", max_entries=64)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在计算指标与AI预测...", max_entries=64)
 def c_analysis(code, fkey, name, start, end):
     """基金深度分析的重计算（指标/因子校验/AI预测），按基金+区间缓存，加速刷新。"""
     hist = data.get_fund_hist(code, fkey, start, end)
@@ -160,7 +160,7 @@ def c_analysis(code, fkey, name, start, end):
     }
 
 
-@st.cache_data(ttl=7200, show_spinner="正在训练多周期预测模型...", max_entries=64)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在训练多周期预测模型...", max_entries=64)
 def c_forecast(code, fkey, name, start, end):
     """AI 走势预测的多周期 LightGBM（4 档），缓存加速。"""
     hist = data.get_fund_hist(code, fkey, start, end)
@@ -173,7 +173,7 @@ def c_forecast(code, fkey, name, start, end):
     return mc, trend
 
 
-@st.cache_data(show_spinner=False, ttl=1200)
+@st.cache_data(show_spinner=False, ttl=config.CACHE_TTL["short"])
 def c_calibration(code, fkey, name, start, end):
     """概率校准曲线数据（基于默认 20 日 horizon），缓存加速。"""
     hist = data.get_fund_hist(code, fkey, start, end)
