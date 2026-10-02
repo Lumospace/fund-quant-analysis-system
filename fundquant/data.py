@@ -5,8 +5,9 @@
 所有接口返回标准化 DataFrame（英文列名，日期已解析，数值已清洗）。
 """
 import os
+import re
 import time
-import json
+import pickle
 import socket
 import hashlib
 import logging
@@ -50,7 +51,7 @@ def _load_cache(key: str, ttl: int):
         if time.time() - os.path.getmtime(p) > ttl:
             return None
         return pd.read_pickle(p)
-    except Exception:
+    except (pickle.UnpicklingError, EOFError, FileNotFoundError, OSError):
         return None
 
 
@@ -60,7 +61,7 @@ def _save_cache(key: str, df):
         tmp = path + ".tmp"
         df.to_pickle(tmp)
         os.replace(tmp, path)
-    except Exception:
+    except (OSError, PermissionError):
         pass
 
 
@@ -74,7 +75,7 @@ def cache_mtime(key: str):
         return None
     try:
         return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(p)))
-    except Exception:
+    except (OSError, FileNotFoundError):
         return None
 
 
@@ -93,7 +94,7 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, **kwargs):
                 _save_cache(key, df)
                 return df
             last = df
-        except Exception as e:  # 接口失败，退避重试
+        except (OSError, ValueError, KeyError, TypeError) as e:
             last = e
             time.sleep(0.6 * (i + 1))
     # 降级：尝试读取过期缓存（最多容忍 30 天过期的数据）
@@ -143,7 +144,7 @@ def clear_cache(key: str = None):
         else:
             for f in os.listdir(config.CACHE_DIR):
                 os.remove(os.path.join(config.CACHE_DIR, f))
-    except Exception:
+    except (OSError, PermissionError, FileNotFoundError):
         pass
 
 
@@ -309,7 +310,7 @@ def fund_code_to_name(code: str) -> str:
         hit = spot[spot["code"] == code]
         if not hit.empty and "name" in hit.columns:
             return str(hit["name"].iloc[0])
-    except Exception:
+    except (IndexError, KeyError, TypeError):
         pass
     return code
 
@@ -450,7 +451,7 @@ def get_stock_industry_index(force: bool = False) -> pd.DataFrame:
                 break  # 超时提前结束，剩余行业留给下次缓存补齐
             try:
                 part = fut.result()
-            except Exception:
+            except (KeyError, TypeError, ValueError):
                 part = None
             if part is not None and not part.empty:
                 parts.append(part)
@@ -492,7 +493,7 @@ def _clean_otc_estimation(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["pct_chg"] = None
     # 从原始列名（如 2026-09-18-估算数据-估算值）提取估值日期，用于判断是否当日更新
-    _m = __import__("re").search(r"(\d{4}-\d{2}-\d{2})", (est_col or chg_col or ""))
+    _m = re.search(r"(\d{4}-\d{2}-\d{2})", (est_col or chg_col or ""))
     df["est_date"] = _m.group(1) if _m else ""
     for c in ["price", "pct_chg"]:
         if c in df.columns:
@@ -512,7 +513,7 @@ def _to_ts(ymd):
         return None
     try:
         return pd.Timestamp(f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}")
-    except Exception:
+    except ValueError:
         return None
 
 

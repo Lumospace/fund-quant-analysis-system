@@ -125,6 +125,53 @@ def _auto_stress_params(returns: pd.Series) -> tuple:
     return mult, days
 
 
+def _iterate_scenarios(full_ret, history_fn, with_paths=False):
+    """统一遍历 STRESS_SCENARIOS + MC_SCENARIOS，减少 4 个入口函数间的重复。
+
+    Parameters
+    ----------
+    full_ret : pd.Series — 基金/组合的全区间日收益序列
+    history_fn : callable(scenario_name, sc) -> (nav_series or None, extra_nav or None)
+        对历史情景返回 (归一化净值, None)；若数据不够(走MC兜底)返回 (None, mc_nav_or_None)
+        对 MC 情景返回 None 由本函数处理。
+    with_paths : bool — 是否同时收集走势路径用于绘图
+    """
+    results, navs = {}, {}
+    for name, sc in config.STRESS_SCENARIOS.items():
+        sm, nd = _auto_stress_params(full_ret)
+        nav, extra = history_fn(name, sc) if callable(history_fn) else (None, None)
+        if nav is not None:
+            stats = _walk_stats(nav)
+            stats["说明"] = sc["desc"]
+            results[name] = stats
+            if with_paths:
+                navs[name] = nav
+            continue
+        mc = _monte_carlo_pressure(full_ret, stress_mult=sm, days=nd,
+                                   drift_sign=sc["drift_sign"], seed=_stable_seed(name))
+        if mc:
+            mc["说明"] = f"{sc['desc']}｜该基金无该区间历史，蒙特卡洛模拟替代"
+            results[name] = mc
+            if with_paths:
+                navs[name] = extra if extra is not None else mc.get("_path")
+        else:
+            results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
+                             "修复周期(交易日)": None, "说明": "区间数据不足"}
+    for name, mc in config.MC_SCENARIOS.items():
+        sm, nd = _auto_stress_params(full_ret)
+        r = _monte_carlo_pressure(full_ret, stress_mult=sm, days=nd,
+                                  drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
+        if r:
+            r["说明"] = mc["desc"]
+            results[name] = r
+        if with_paths:
+            mc_paths = _monte_carlo_navs(full_ret, stress_mult=sm, days=nd,
+                                         drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
+            if mc_paths:
+                navs[name] = mc_paths["最差路径(最大回撤最大)"]
+    return results, navs
+
+
 def _monte_carlo_pressure(returns, stress_mult: float = 2.5, days: int = 60,
                           n_paths: int = 300, drift_sign: float = -1.0,
                           seed: int = 2024) -> dict:
@@ -183,35 +230,16 @@ def _monte_carlo_navs(returns, stress_mult: float = 2.5, days: int = 60,
 def stress_test_portfolio(prices_dict: dict, weights: dict) -> dict:
     """对当前组合（权重）进行历史情景 + 蒙特卡洛压力测试。"""
     full_ret = _full_returns(prices_dict)
-    port_full = _portfolio_returns(full_ret, weights)  # 组合全历史收益（MC 兜底用）
-    results = {}
-    for name, sc in config.STRESS_SCENARIOS.items():
-        sm, nd = _auto_stress_params(port_full)
+    port_full = _portfolio_returns(full_ret, weights)
+
+    def _history_fn(name, sc):
         ret_df = _scenario_returns(prices_dict, sc["start"], sc["end"])
         if ret_df.empty:
-            mc = _monte_carlo_pressure(port_full, stress_mult=sm,
-                                       days=nd, drift_sign=sc["drift_sign"],
-                                       seed=_stable_seed(name))
-            if mc:
-                mc["说明"] = f"{sc['desc']}｜组合无该区间历史，蒙特卡洛模拟替代"
-                results[name] = mc
-            else:
-                results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
-                                 "修复周期(交易日)": None, "说明": "区间数据不足"}
-            continue
+            return None, None
         port_ret = _portfolio_returns(ret_df, weights)
-        nav = _nav_from_ret(port_ret)
-        stats = _walk_stats(nav)
-        stats["说明"] = sc["desc"]
-        results[name] = stats
-    # 追加参数化蒙特卡洛 what-if 情景
-    for name, mc in config.MC_SCENARIOS.items():
-        sm, nd = _auto_stress_params(port_full)
-        r = _monte_carlo_pressure(port_full, stress_mult=sm, days=nd,
-                                  drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if r:
-            r["说明"] = mc["desc"]
-            results[name] = r
+        return _nav_from_ret(port_ret), None
+
+    results, _ = _iterate_scenarios(port_full, _history_fn, with_paths=False)
     return results
 
 
@@ -220,33 +248,14 @@ def stress_test_fund(prices: pd.Series) -> dict:
     s = pd.to_numeric(prices, errors="coerce").dropna()
     s.index = pd.to_datetime(s.index)
     full_ret = s.pct_change().dropna()
-    results = {}
-    for name, sc in config.STRESS_SCENARIOS.items():
-        sm, nd = _auto_stress_params(full_ret)
+
+    def _history_fn(name, sc):
         sub = s[(s.index >= pd.Timestamp(sc["start"])) & (s.index <= pd.Timestamp(sc["end"]))]
         if len(sub) < 20:
-            mc = _monte_carlo_pressure(full_ret, stress_mult=sm,
-                                       days=nd, drift_sign=sc["drift_sign"],
-                                       seed=_stable_seed(name))
-            if mc:
-                mc["说明"] = f"{sc['desc']}｜该基金无该区间历史，蒙特卡洛模拟替代"
-                results[name] = mc
-            else:
-                results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
-                                 "修复周期(交易日)": None, "说明": "区间数据不足"}
-            continue
-        nav = sub / sub.iloc[0]
-        stats = _walk_stats(nav)
-        stats["说明"] = sc["desc"]
-        results[name] = stats
-    # 追加参数化蒙特卡洛 what-if 情景
-    for name, mc in config.MC_SCENARIOS.items():
-        sm, nd = _auto_stress_params(full_ret)
-        r = _monte_carlo_pressure(full_ret, stress_mult=sm, days=nd,
-                                  drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if r:
-            r["说明"] = mc["desc"]
-            results[name] = r
+            return None, None
+        return sub / sub.iloc[0], None
+
+    results, _ = _iterate_scenarios(full_ret, _history_fn, with_paths=False)
     return results
 
 
@@ -258,44 +267,14 @@ def stress_test_fund_with_paths(prices: pd.Series) -> tuple:
     s = pd.to_numeric(prices, errors="coerce").dropna()
     s.index = pd.to_datetime(s.index)
     full_ret = s.pct_change().dropna()
-    results = {}
-    navs = {}
-    for name, sc in config.STRESS_SCENARIOS.items():
-        sm, nd = _auto_stress_params(full_ret)
+
+    def _history_fn(name, sc):
         sub = s[(s.index >= pd.Timestamp(sc["start"])) & (s.index <= pd.Timestamp(sc["end"]))]
         if len(sub) < 20:
-            mc = _monte_carlo_pressure(full_ret, stress_mult=sm,
-                                       days=nd, drift_sign=sc["drift_sign"],
-                                       seed=_stable_seed(name))
-            if mc:
-                mc["说明"] = f"{sc['desc']}｜该基金无该区间历史，蒙特卡洛模拟替代"
-                results[name] = mc
-                mc_paths = _monte_carlo_navs(full_ret, stress_mult=sm,
-                                             days=nd, drift_sign=sc["drift_sign"],
-                                             seed=_stable_seed(name))
-                if mc_paths:
-                    navs[name] = mc_paths["最差路径(最大回撤最大)"]
-            else:
-                results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
-                                 "修复周期(交易日)": None, "说明": "区间数据不足"}
-            continue
-        nav = sub / sub.iloc[0]
-        stats = _walk_stats(nav)
-        stats["说明"] = sc["desc"]
-        results[name] = stats
-        navs[name] = nav
-    for name, mc in config.MC_SCENARIOS.items():
-        sm, nd = _auto_stress_params(full_ret)
-        r = _monte_carlo_pressure(full_ret, stress_mult=sm, days=nd,
-                                  drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if r:
-            r["说明"] = mc["desc"]
-            results[name] = r
-        mc_paths = _monte_carlo_navs(full_ret, stress_mult=sm, days=nd,
-                                     drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if mc_paths:
-            navs[name] = mc_paths["最差路径(最大回撤最大)"]
-    return results, navs
+            return None, None
+        return sub / sub.iloc[0], None
+
+    return _iterate_scenarios(full_ret, _history_fn, with_paths=True)
 
 
 def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
@@ -305,45 +284,15 @@ def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
     """
     full_ret = _full_returns(prices_dict)
     port_full = _portfolio_returns(full_ret, weights)
-    results = {}
-    navs = {}
-    for name, sc in config.STRESS_SCENARIOS.items():
-        sm, nd = _auto_stress_params(port_full)
+
+    def _history_fn(name, sc):
         ret_df = _scenario_returns(prices_dict, sc["start"], sc["end"])
         if ret_df.empty:
-            mc = _monte_carlo_pressure(port_full, stress_mult=sm,
-                                       days=nd, drift_sign=sc["drift_sign"],
-                                       seed=_stable_seed(name))
-            if mc:
-                mc["说明"] = f"{sc['desc']}｜组合无该区间历史，蒙特卡洛模拟替代"
-                results[name] = mc
-                mc_paths = _monte_carlo_navs(port_full, stress_mult=sm,
-                                             days=nd, drift_sign=sc["drift_sign"],
-                                             seed=_stable_seed(name))
-                if mc_paths:
-                    navs[name] = mc_paths["最差路径(最大回撤最大)"]
-            else:
-                results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
-                                 "修复周期(交易日)": None, "说明": "区间数据不足"}
-            continue
+            return None, None
         port_ret = _portfolio_returns(ret_df, weights)
-        nav = _nav_from_ret(port_ret)
-        stats = _walk_stats(nav)
-        stats["说明"] = sc["desc"]
-        results[name] = stats
-        navs[name] = nav
-    for name, mc in config.MC_SCENARIOS.items():
-        sm, nd = _auto_stress_params(port_full)
-        r = _monte_carlo_pressure(port_full, stress_mult=sm, days=nd,
-                                  drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if r:
-            r["说明"] = mc["desc"]
-            results[name] = r
-        mc_paths = _monte_carlo_navs(port_full, stress_mult=sm, days=nd,
-                                     drift_sign=mc["drift_sign"], seed=_stable_seed("MC_" + name))
-        if mc_paths:
-            navs[name] = mc_paths["最差路径(最大回撤最大)"]
-    return results, navs
+        return _nav_from_ret(port_ret), None
+
+    return _iterate_scenarios(port_full, _history_fn, with_paths=True)
 
 
 def stress_summary(results: dict) -> str:

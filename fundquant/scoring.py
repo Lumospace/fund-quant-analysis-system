@@ -5,7 +5,6 @@
 每项细分指标给出 0-100 分与扣分/加分原因。
 """
 import numpy as np
-import pandas as pd
 
 import config
 

@@ -201,21 +201,6 @@ def get_colors(is_dark: bool = False) -> dict:
     return DARK_COLORS if is_dark else COLORS
 
 
-def sign_color(value, zero_as=None):
-    """按数值正负返回语义配色 hex（红涨绿跌）：正数→up，负数→down。
-    0 或非数值 → zero_as（默认 None 表示不着色，用默认中性色）。
-    供界面「数字正负自动着色」统一调用，保证全系统涨跌口径一致。
-    """
-    try:
-        v = float(str(value).replace("%", "").replace(",", "").strip())
-    except (TypeError, ValueError):
-        return zero_as
-    if v > 0:
-        return COLORS["up"]
-    if v < 0:
-        return COLORS["down"]
-    return zero_as
-
 # ============ 合规风险提示 ============
 RISK_DISCLAIMER = (
     "本系统所有输出仅供量化数据分析与投研学习参考，不构成任何投资依据或收益承诺，"

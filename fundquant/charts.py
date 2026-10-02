@@ -24,8 +24,8 @@ def _base(fig, title="", height=380, showlegend=None, colors=None):
         hovermode="x unified",
         hoverlabel=dict(bgcolor=pal["primary"], font_color="#ffffff", font_size=12),
         font=dict(color=pal["neutral"], size=12),
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
-                    bgcolor="rgba(255,255,255,0.08)", font=dict(size=11)),
+        legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="center", x=0.5,
+                    bgcolor="rgba(255,255,255,0.7)", font=dict(size=10)),
         dragmode="zoom",
         modebar=dict(bgcolor="rgba(255,255,255,0.08)", color=pal["neutral"]),
     )

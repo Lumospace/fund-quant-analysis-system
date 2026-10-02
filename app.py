@@ -36,7 +36,7 @@ def inject_css():
     <style>
     .main .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
     h1,h2,h3,h4 {{color: {C['primary']};}}
-    .stApp {{background: {C['bg']};}}
+    .stApp {{background: {C['bg']}; zoom: 1.1;}}
     /* 侧边栏：渐变背景 + 精准着色 */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, #1E3A5F 0%, #2B6CB0 100%);
@@ -535,28 +535,21 @@ def page_profile():
         rr = ind.rolling_return(prices, win)
         rv = ind.rolling_volatility(prices, win)
         pts = ind.rolling_risk_return_points(prices, win, step=max(5, win // 3))
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.plotly_chart(charts.rolling_line(rr, f"滚动{win}日收益(%)",
-                                                config.COLORS["primary"]), width="stretch")
-        with c2:
-            st.plotly_chart(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
-                                                config.COLORS["accent"], fill=True), width="stretch")
-        with c3:
-            st.plotly_chart(charts.risk_return_scatter(pts), width="stretch")
+        st.plotly_chart(charts.rolling_line(rr, f"滚动{win}日收益(%)",
+                                            config.COLORS["primary"]), width="stretch")
+        st.plotly_chart(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
+                                            config.COLORS["accent"], fill=True), width="stretch")
+        st.plotly_chart(charts.risk_return_scatter(pts), width="stretch")
         st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
                    "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
 
     with tabs[1]:  # 走势与回撤
-        c1, c2 = st.columns(2)
-        with c1:
-            if fkey == "otc":
-                st.plotly_chart(charts.price_line({name: prices}, "净值走势", normalize=False),
-                                width="stretch")
-            else:
-                st.plotly_chart(charts.candlestick(hist, name), width="stretch")
-        with c2:
-            st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
+        if fkey == "otc":
+            st.plotly_chart(charts.price_line({name: prices}, "净值走势", normalize=False),
+                            width="stretch")
+        else:
+            st.plotly_chart(charts.candlestick(hist, name), width="stretch")
+        st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
 
         st.markdown("#### 相对基准走势")
         bm = c_benchmark("沪深300")
@@ -687,13 +680,10 @@ def page_profile():
             if sel and ic_frame is not None and not ic_frame.empty:
                 ic_sel = ic_frame[[c for c in sel if c in ic_frame.columns]]
                 cum_sel = cum_ic[[c for c in sel if c in cum_ic.columns]]
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch",
-                                    key="prof_fac_ic_roll")
-                with c2:
-                    st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
-                                    width="stretch", key="prof_fac_ic_cum")
+                st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch",
+                                key="prof_fac_ic_roll")
+                st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
+                                width="stretch", key="prof_fac_ic_cum")
         st.markdown("---")
         st.caption("因子有效性基于滚动 IC 时序统计：IC 均值 >0 且 t 检验显著才标记为可用。"
                    "失败比例 ≥40% 预警、≥60% 已下线。")
@@ -710,224 +700,6 @@ def page_profile():
                             width="stretch", key="prof_fac_corr")
 
 
-# ==================== 页面 2（旧）：基金深度分析（已废弃，保留引用兼容） ====================
-def page_fund_analysis():
-    st.header("基金深度分析")
-    code, name, fkey = cur_fund()
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        start = st.text_input("开始日期(YYYYMMDD)", default_start())
-    with c2:
-        end = st.text_input("结束日期(YYYYMMDD)", default_end())
-
-    res = c_analysis(code, fkey, name, start, end)
-    if res is None:
-        st.warning("该基金历史行情为空或样本不足（可能代码有误或区间无数据）。")
-        return
-    hist = res["hist"]
-    prices = res["prices"]
-    metrics = res["metrics"].copy()
-    fval = res["fval"]
-    trend = res["trend"]
-    pred = res["pred"]
-    _vp = metrics["估值分位"]
-    metrics["估值状态"] = ind.valuation_status(_vp / 100) if _vp is not None else "数据不足"
-    score = scoring.composite_score(metrics, st.session_state.style)
-
-    st.markdown(f"#### {name}（{code}）核心指标")
-    render_metrics_row(metrics, [
-        ("年化收益", "年化收益%"), ("最大回撤", "最大回撤%"),
-        ("夏普比率", "夏普比率"), ("估值分位", "估值分位%"),
-        ("年化波动率", "年化波动%"), ("近1年", "近1年%"),
-        ("索提诺比率", "索提诺比率"), ("最长回撤天数", "最长回撤修复周期"),
-    ])
-
-    st.markdown(f"#### 综合评分：{score['total']} 分 <span class='badge'>{score['rating']}</span> "
-                f"（风格：{score['style']}）", unsafe_allow_html=True)
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.plotly_chart(charts.radar_chart(score["breakdown"]), width="stretch")
-    with c2:
-        st.markdown("**分维度评分明细**")
-        pdf = pd.DataFrame([{"维度": k, "权重": f"{d['weight']*100:.0f}%",
-                             "得分": d["score"], "依据": "；".join(d["reasons"])}
-                            for k, d in score["breakdown"].items()])
-        full_table(pdf)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if fkey == "otc":
-            st.plotly_chart(charts.price_line({name: prices}, "净值走势", normalize=False),
-                            width="stretch")
-        else:
-            st.plotly_chart(charts.candlestick(hist, name), width="stretch")
-    with c2:
-        st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
-
-    st.markdown("#### 滚动收益与风险特征")
-    win = st.slider("滚动窗口（交易日）", 30, 120, 60, 10, key="ra_win")
-    rr = ind.rolling_return(prices, win)
-    rv = ind.rolling_volatility(prices, win)
-    pts = ind.rolling_risk_return_points(prices, win, step=max(5, win // 3))
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.plotly_chart(charts.rolling_line(rr, f"滚动{win}日收益(%)",
-                                            config.COLORS["primary"]), width="stretch")
-    with c2:
-        st.plotly_chart(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
-                                            config.COLORS["accent"], fill=True), width="stretch")
-    with c3:
-        st.plotly_chart(charts.risk_return_scatter(pts), width="stretch")
-    st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
-               "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
-
-    st.markdown("#### 相对基准走势")
-    bm = c_benchmark("沪深300")
-    bm_p = ind.to_price_series(bm).tail(len(prices))
-    prices.index = pd.to_datetime(prices.index)
-    bm_p.index = pd.to_datetime(bm_p.index)
-    st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], "沪深300": bm_p},
-                                      "基金 vs 沪深300（归一化）"), width="stretch")
-
-    st.markdown("#### 估值偏离监控")
-    _vp_pe = metrics.get("估值分位")
-    if _vp_pe is not None:
-        price_pct = float((prices <= prices.iloc[-1]).mean())
-        deviation = float(price_pct - _vp_pe / 100)
-        _m1, _m2, _m3 = st.columns(3)
-        _m1.metric("价格分位", f"{price_pct:.0%}")
-        _m2.metric("PE分位", f"{_vp_pe/100:.0%}")
-        _m3.metric("偏离度", f"{deviation:+.0%}")
-        if abs(deviation) < 0.15:
-            st.info(f"**正常**：价格分位({price_pct:.0%}) ≈ PE分位({_vp_pe/100:.0%})，估值定价一致")
-        elif deviation > 0.15:
-            st.error(f"**偏高估**：价格分位({price_pct:.0%}) 显著高于 PE分位({_vp_pe/100:.0%})，"
-                     f"偏离 {deviation:.0%}，市场情绪可能过度乐观")
-        else:
-            st.success(f"**偏低估**：价格分位({price_pct:.0%}) 显著低于 PE分位({_vp_pe/100:.0%})，"
-                       f"偏离 {-deviation:.0%}，基本面支撑高于市场定价")
-    else:
-        st.caption("估值分位数据不足（基金需有可识别的跟踪指数且 PE 历史 >36 条），无法计算估值偏离。")
-
-    # 穿透分析：底层投向 → 行业/风格饼图
-    holds = c_holdings(code)
-    if holds is not None and not holds.empty:
-        lt = c_lookthrough(code)
-        det = lt.get("details")
-        if det is not None and not det.empty:
-            st.markdown("#### 底层投向穿透")
-            st.markdown(f"前十大合计占净值 **{lt.get('concentration', 0):.1f}%**")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.plotly_chart(charts.pie_chart(lt["industry"].to_dict(), "行业分布（占前十）"),
-                                width="stretch")
-            with c2:
-                st.plotly_chart(charts.pie_chart(lt["size"].to_dict(), "规模风格（大盘/中盘/小盘）"),
-                                width="stretch")
-            with c3:
-                st.plotly_chart(charts.pie_chart(lt["value"].to_dict(), "估值风格（价值/平衡/成长）"),
-                                width="stretch")
-            st.caption("行业按重仓股申万一级行业归集；规模风格按总市值(亿)分档(≥800大盘/≥200中盘/其余小盘)；"
-                       "估值风格按 市盈率(动态) 分档(≤20价值/≥40成长/中间平衡)，亏损股归入成长。")
-            holds_cols = [c for c in ["序号", "股票代码", "股票名称", "占净值比例", "持股数", "持仓市值"]
-                          if c in holds.columns]
-            st.markdown("##### 前十大重仓股")
-            full_table(holds[holds_cols].head(10))
-    else:
-        st.info("未获取到重仓股数据。")
-
-    st.markdown("#### 因子 IC 时序与累计 IC")
-    fval_names = list(fval["因子"]) if fval is not None and not fval.empty else []
-    if fval_names:
-        sel = st.multiselect("选择因子", fval_names, default=fval_names[:5], key="ic_factors")
-        ic_frame = res.get("ic_ts")
-        cum_ic = res.get("cum_ic")
-        if sel and ic_frame is not None and not ic_frame.empty:
-            ic_sel = ic_frame[[c for c in sel if c in ic_frame.columns]]
-            cum_sel = cum_ic[[c for c in sel if c in cum_ic.columns]]
-            c1, c2 = st.columns(2)
-            with c1:
-                st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch")
-            with c2:
-                st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
-                                width="stretch")
-            st.caption("IC 为因子值与未来 20 日收益的 Spearman 秩相关（滚动 60 日、每 10 日采样）。"
-                       "累计 IC 持续上行代表该因子方向长期稳定有效。")
-        else:
-            st.info("样本不足，无法绘制 IC 曲线。")
-
-    st.markdown("#### 因子有效性校验（自动淘汰机制）")
-    full_table(fval)
-
-    advice = report.generate_operation_advice(metrics, pred, st.session_state.style,
-                                              trend, score=score)
-    st.markdown("#### 落地操作建议")
-    full_table(pd.DataFrame([{"项目": k, "内容": v} for k, v in advice.items()]))
-
-
-# ==================== 页面 3（旧）：AI 走势预测（已废弃，保留引用兼容） ====================
-def page_predict():
-    st.header("AI 智能走势预测")
-    code, name, fkey = cur_fund()
-    mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
-    if not mc:
-        st.warning("无数据")
-        return
-
-    st.markdown(f"#### {name} 多周期涨跌概率")
-    rows = []
-    for h, r in mc.items():
-        rows.append({
-            "预测周期": f"{h} 日",
-            "上涨概率": f"{r['prob_up']*100:.1f}%",
-            "下跌概率": f"{r['prob_down']*100:.1f}%",
-            "预期收益区间": f"{r['return_range'][0]:.1f}% ~ {r['return_range'][1]:.1f}%",
-            "置信度": f"{r['confidence']*100:.0f}%",
-            "AUC": r["auc"],
-            "方法": r["method"],
-        })
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
-
-    cols = st.columns(len(mc))
-    for col, (h, r) in zip(cols, mc.items()):
-        with col:
-            col.plotly_chart(charts.probability_gauge(r["prob_up"], f"{h}日上涨概率"),
-                             width="stretch")
-
-    st.markdown("#### 拐点与支撑压力")
-    t1, t2 = st.columns(2)
-    with t1:
-        rsi_val = trend.get("rsi")
-        signal_val = trend.get("signal", "")
-        if rsi_val is not None:
-            st.metric("RSI(14)", rsi_val, delta=signal_val)
-        else:
-            st.metric("RSI(14)", "数据不足")
-        ma20_val = trend.get("dist_ma20_pct")
-        if ma20_val is not None:
-            st.metric("距20日均线", f"{ma20_val:.1f}%")
-        else:
-            st.metric("距20日均线", "数据不足")
-    with t2:
-        sup_val = trend.get("support")
-        res_val = trend.get("resistance")
-        st.metric("支撑位", f"{sup_val:.4f}" if sup_val is not None else "数据不足")
-        st.metric("压力位", f"{res_val:.4f}" if res_val is not None else "数据不足")
-
-    best = max(mc.values(), key=lambda r: r["auc"])
-    if best.get("importance"):
-        st.markdown("#### 特征重要性 Top8（模型可解释性）")
-        imp = best["importance"]
-        st.plotly_chart(charts.bar_compare(
-            {k: round(v, 3) for k, v in imp.items()}, "特征重要性"), width="stretch")
-
-    calib = c_calibration(code, fkey, name, default_start(), default_end())
-    if calib:
-        st.markdown("#### 概率校准曲线")
-        st.plotly_chart(charts.reliability_diagram(calib), width="stretch")
-        st.caption("校准曲线检验 LightGBM 输出概率的可靠性：点落在对角线上方表示模型低估、"
-                   "下方表示高估；点大小代表该分桶的样本量；n<2 的桶不展示。")
-    else:
         st.info("样本外数据不足，无法绘制概率校准曲线（需要 ≥60 条训练样本且 ≥10 条 OOS 校验样本）。")
 
 
@@ -1232,11 +1004,8 @@ def page_portfolio():
 
     st.markdown("#### 风险结构与相关性")
     rc_df = pf.risk_contribution(opt["raw_weights"], ret)
-    r1, r2 = st.columns(2)
-    with r1:
-        st.plotly_chart(charts.risk_contribution_bar(rc_df), width="stretch")
-    with r2:
-        st.plotly_chart(charts.corr_heatmap(ret.corr()), width="stretch")
+    st.plotly_chart(charts.risk_contribution_bar(rc_df), width="stretch")
+    st.plotly_chart(charts.corr_heatmap(ret.corr()), width="stretch")
     st.caption("风险贡献占比合计 100%；占比显著高于权重的资产为组合主要风险来源，"
                "相关性接近 1 的成分无法通过分散化降低风险。")
 
@@ -1570,14 +1339,11 @@ def page_stress():
     ]).rename(columns={"修复周期(交易日)": "修复周期"})
     full_table(sdf)
 
-    col_bar, col_curve = st.columns(2)
-    with col_bar:
-        st.plotly_chart(charts.stress_bar(res), width="stretch")
-    with col_curve:
-        if navs and any(len(v) > 1 for v in navs.values()):
-            st.plotly_chart(charts.stress_drawdown_overlay(navs), width="stretch")
-        else:
-            st.info("暂无足够数据绘制回撤路径曲线")
+    st.plotly_chart(charts.stress_bar(res), width="stretch")
+    if navs and any(len(v) > 1 for v in navs.values()):
+        st.plotly_chart(charts.stress_drawdown_overlay(navs), width="stretch")
+    else:
+        st.info("暂无足够数据绘制回撤路径曲线")
     st.markdown("#### 结论")
     st.warning(stress.stress_summary(res))
 

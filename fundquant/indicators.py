@@ -92,12 +92,7 @@ def longest_drawdown_days(prices: pd.Series) -> int:
         return 0
     m = 0
     cur = 0
-    max_iter = len(dd) + 1
-    _iter = 0
     for v in dd:
-        _iter += 1
-        if _iter > max_iter:
-            break
         if v < 0:
             cur += 1
             m = max(m, cur)
@@ -243,11 +238,10 @@ def pe_percentile_series(pe_hist) -> pd.Series:
     }).dropna().sort_values("date").reset_index(drop=True)
     if len(pdf) < 36:
         return pd.Series(dtype=float)
-    vals = []
     pe_arr = pdf["pe"].values
-    for i in range(len(pe_arr)):
-        hist = pe_arr[:i]  # 截至前一期的历史，严格无前视
-        vals.append(float((hist < pe_arr[i]).mean()) if len(hist) >= 24 else np.nan)
+    vals = np.full(len(pe_arr), np.nan)
+    for i in range(24, len(pe_arr)):
+        vals[i] = float((pe_arr[:i] < pe_arr[i]).mean())
     return pd.Series(vals, index=pdf["date"].values)
 
 
