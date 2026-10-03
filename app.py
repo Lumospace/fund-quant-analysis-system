@@ -36,7 +36,9 @@ def inject_css():
     <style>
     .main .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
     h1,h2,h3,h4 {{color: {C['primary']};}}
-    .stApp {{background: {C['bg']}; zoom: 1.1;}}
+    .stApp {{background: {C['bg']};
+        font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
+                     "Helvetica Neue", Arial, sans-serif;}}
     /* 侧边栏：渐变背景 + 精准着色 */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, #1E3A5F 0%, #2B6CB0 100%);
