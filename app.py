@@ -1163,25 +1163,32 @@ def page_dca():
     st.header("基金定投测算")
     st.caption("支持固定金额、估值不定额、首笔初投等多种定投策略的历史回测")
     code, name, fkey = cur_fund()
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        freq = st.selectbox("定投频率", ["周", "双周", "月"], index=2)
-    with c2:
-        amount = st.number_input("每期金额(元)", 100, 100000, 1000, 100)
-    with c3:
-        mode = st.selectbox("定投模式", ["固定", "估值不定额"], index=0)
-    with c4:
-        init_amt = st.number_input("初投金额(元)", 0, 1000000, 0, 100,
-                                   help="起投时一次性投入的金额，0 表示无首笔投入")
 
-    t1, t2 = st.columns(2)
-    with t1:
-        start_date = st.date_input("起投时间", value=_dt.date.today() - _dt.timedelta(days=5 * 365),
-                                   min_value=_dt.date(2010, 1, 1),
-                                   max_value=_dt.date.today())
-    with t2:
-        end_date = st.date_input("结束时间", value=_dt.date.today(),
-                                 min_value=start_date, max_value=_dt.date.today())
+    with st.form("dca_form"):
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            freq = st.selectbox("定投频率", ["周", "双周", "月"], index=2)
+        with c2:
+            amount = st.number_input("每期金额(元)", 100, 100000, 1000, 100)
+        with c3:
+            mode = st.selectbox("定投模式", ["固定", "估值不定额"], index=0)
+        with c4:
+            init_amt = st.number_input("初投金额(元)", 0, 1000000, 0, 100,
+                                       help="起投时一次性投入的金额，0 表示无首笔投入")
+
+        t1, t2 = st.columns(2)
+        with t1:
+            start_date = st.date_input("起投时间", value=_dt.date.today() - _dt.timedelta(days=5 * 365),
+                                       min_value=_dt.date(2010, 1, 1),
+                                       max_value=_dt.date.today())
+        with t2:
+            end_date = st.date_input("结束时间", value=_dt.date.today(),
+                                     min_value=start_date, max_value=_dt.date.today())
+        submitted = st.form_submit_button("开始测算", type="primary", use_container_width=True)
+
+    if not submitted:
+        st.info("设置好定投参数后，点击「开始测算」。")
+        return
 
     if start_date >= end_date:
         st.warning("起投时间需早于结束时间")
@@ -1234,37 +1241,44 @@ def page_backtest():
     st.caption("双均线 / 动量 / 定投 / 买入持有 多策略横向对比，计入交易成本")
     code, name, fkey = cur_fund()
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        start = st.date_input("开始日期", value=_dt.date.today() - _dt.timedelta(days=5 * 365),
-                              min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
-    with c2:
-        end = st.date_input("结束日期", value=_dt.date.today(),
-                            min_value=start, max_value=_dt.date.today())
+    with st.form("bt_form"):
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            start = st.date_input("开始日期", value=_dt.date.today() - _dt.timedelta(days=5 * 365),
+                                  min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
+        with c2:
+            end = st.date_input("结束日期", value=_dt.date.today(),
+                                min_value=start, max_value=_dt.date.today())
+
+        st.markdown("#### 交易成本（择时策略计入 · 单位：万分之几）")
+        t1, t2 = st.columns([1, 1])
+        with t1:
+            fee = st.number_input("单边手续费（万分之几）", 0.0, 50.0, 2.5, 0.5,
+                                  format="%.1f", help="如万 2.5 手续费；万分之 1 = 0.01%")
+        with t2:
+            slip = st.number_input("单边滑点成本（万分之几）", 0.0, 50.0, 5.0, 0.5,
+                                   format="%.1f", help="买卖价差 + 冲击成本，如万 5")
+
+        st.markdown("#### 策略参数")
+        p1, p2, p3, p4, p5 = st.columns(5)
+        with p1:
+            ma_fast = st.number_input("双均线·短周期", 3, 250, 20, 1)
+        with p2:
+            ma_slow = st.number_input("双均线·长周期", 5, 500, 60, 1)
+        with p3:
+            mom_window = st.number_input("动量·回顾窗口(日)", 5, 250, 60, 1)
+        with p4:
+            dca_freq = st.selectbox("定投频率", ["周", "双周", "月"], index=2)
+        with p5:
+            dca_amount = st.number_input("定投每期金额(元)", 100, 100000, 1000, 100)
+        submitted = st.form_submit_button("开始回测", type="primary", use_container_width=True)
+
+    if not submitted:
+        st.info("设置好回测参数后，点击「开始回测」。")
+        return
+
     start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
-
-    st.markdown("#### 交易成本（择时策略计入 · 单位：万分之几）")
-    t1, t2 = st.columns([1, 1])
-    with t1:
-        fee = st.number_input("单边手续费（万分之几）", 0.0, 50.0, 2.5, 0.5,
-                              format="%.1f", help="如万 2.5 手续费；万分之 1 = 0.01%")
-    with t2:
-        slip = st.number_input("单边滑点成本（万分之几）", 0.0, 50.0, 5.0, 0.5,
-                               format="%.1f", help="买卖价差 + 冲击成本，如万 5")
     cost_rate = (fee + slip) / 10000.0
-
-    st.markdown("#### 策略参数")
-    p1, p2, p3, p4, p5 = st.columns(5)
-    with p1:
-        ma_fast = st.number_input("双均线·短周期", 3, 250, 20, 1)
-    with p2:
-        ma_slow = st.number_input("双均线·长周期", 5, 500, 60, 1)
-    with p3:
-        mom_window = st.number_input("动量·回顾窗口(日)", 5, 250, 60, 1)
-    with p4:
-        dca_freq = st.selectbox("定投频率", ["周", "双周", "月"], index=2)
-    with p5:
-        dca_amount = st.number_input("定投每期金额(元)", 100, 100000, 1000, 100)
 
     if ma_fast >= ma_slow:
         st.warning("双均线短周期需小于长周期。")
