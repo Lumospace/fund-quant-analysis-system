@@ -152,21 +152,21 @@ class TurnoverFactor(FactorDef):
         return -t.rolling(20).mean()  # 低换手正向
 
 
-class QualityROEFactor(FactorDef):
+class EarningsYieldFactor(FactorDef):
     def __init__(self):
-        super().__init__("quality_roe", "质量(ROE)因子", "基础", True,
-                         "净资产收益率，反映公司盈利能力与资本效率；"
-                         "基金维度通过跟踪指数的加权 ROE 近似")
+        super().__init__("earnings_yield", "盈利收益率因子", "基础", True,
+                         "盈利收益率=1/PE，反映估值高低；值越高代表越被低估，"
+                         "长期收益潜力越大")
 
     def compute(self, prices, hist, pe_hist=None):
-        # 从 pe_hist 反推 ROE：ROE ≈ 1/PE（作为盈利质量的近似），
-        # 滚动均值平滑噪音
+        # 盈利收益率 E/P = 1/PE，作为估值代理（仅有 PE 数据，无法还原真实
+        # ROE=净利润/净资产，故不把 1/PE 误标为 ROE），滚动均值平滑噪音。
         if pe_hist is None or pe_hist.empty or "pe" not in pe_hist.columns:
             return pd.Series(np.nan, index=prices.index)
         pe = pe_hist.set_index("date")["pe"]
         pe = pd.to_numeric(pe, errors="coerce").dropna().reindex(prices.index, method="ffill")
-        roe = 1.0 / pe.replace(0, np.nan)
-        return roe.rolling(60).mean()
+        ey = 1.0 / pe.replace(0, np.nan)
+        return ey.rolling(60).mean()
 
 
 class CrowdingFactor(FactorDef):
@@ -262,7 +262,7 @@ FACTORS: dict = {
         MomentumFactor(), MeanReversionFactor(), VolatilityFactor(),
         ValuationFactor(), WinRateFactor(), DrawdownFactor(),
         TrendFactor(), TurnAnomalyFactor(), MoneyFlowFactor(),
-        TurnoverFactor(), QualityROEFactor(), CrowdingFactor(),
+        TurnoverFactor(), EarningsYieldFactor(), CrowdingFactor(),
     ]
 }
 
