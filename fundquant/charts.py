@@ -170,6 +170,8 @@ def stress_drawdown_overlay(navs: dict, title="各情景回撤路径叠加"):
     """
     fig = go.Figure()
     for i, (name, nav) in enumerate(navs.items()):
+        if not isinstance(nav, pd.Series):
+            continue
         nav = pd.to_numeric(nav, errors="coerce").dropna()
         if len(nav) < 2:
             continue

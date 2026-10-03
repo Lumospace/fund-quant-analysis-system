@@ -153,7 +153,14 @@ def _iterate_scenarios(full_ret, history_fn, with_paths=False):
             mc["说明"] = f"{sc['desc']}｜该基金无该区间历史，蒙特卡洛模拟替代"
             results[name] = mc
             if with_paths:
-                navs[name] = extra if extra is not None else mc.get("_path")
+                if extra is not None:
+                    navs[name] = extra
+                else:
+                    mc_paths = _monte_carlo_navs(full_ret, stress_mult=sm, days=nd,
+                                                 drift_sign=sc["drift_sign"],
+                                                 seed=_stable_seed(name))
+                    if mc_paths:
+                        navs[name] = mc_paths["最差路径(最大回撤最大)"]
         else:
             results[name] = {"最大回撤": None, "缩水幅度": None, "年化波动率": None,
                              "修复周期(交易日)": None, "说明": "区间数据不足"}
