@@ -32,7 +32,7 @@ def _base(fig, title="", height=380, showlegend=None, colors=None):
         hovermode="x unified",
         hoverlabel=dict(bgcolor=pal["primary"], font_color="#ffffff", font_size=12),
         font=dict(color=pal["neutral"], size=12),
-        legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="center", x=0.5,
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="center", x=0.5,
                     bgcolor="rgba(30,41,59,0.7)" if is_dark else "rgba(255,255,255,0.7)",
                     font=dict(size=10, color=pal["neutral"])),
         dragmode="zoom",
