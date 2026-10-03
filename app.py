@@ -937,7 +937,6 @@ def page_portfolio():
 
     if submitted:
         st.session_state["pf_done"] = True
-        st.session_state.pop("pf_walk_summary", None)  # 重新优化后作废旧的样本外结果
     if not st.session_state.get("pf_done", False):
         st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
         return
@@ -946,26 +945,38 @@ def page_portfolio():
         st.warning("请至少选择 2 只基金构建组合。")
         return
 
-    with st.spinner("拉取成分行情并优化..."):
-        prices_dict = {}
-        for lbl in picks:
-            c = s[s["label"] == lbl]["code"].iloc[0]
-            nm = s[s["label"] == lbl]["name"].iloc[0]
-            h = c_fund_hist(c, fkey, default_start(), default_end())
-            if not h.empty:
-                prices_dict[nm] = ind.to_price_series(h)
-        ret = pd.DataFrame({k: v.pct_change() for k, v in prices_dict.items()}).dropna()
-
-    if len(prices_dict) < 2:
-        st.warning("有效成分不足")
-        return
-
-    mode_key = {"最大夏普": "max_sharpe", "最小方差": "min_variance",
-                "目标收益": "target_return", "风险平价": "risk_parity"}[mode]
-    opt = pf.optimize_portfolio(ret, mode=mode_key,
-                                target_return=(target_ret if mode == "目标收益" else None),
-                                max_weight=max_w, bounds=bounds,
-                                sector_limit=sector_limit, return_frontier=True)
+    # 缓存主优化结果：后续点击「样本外回测」等按钮触发 rerun 时命中缓存，避免整页重算灰屏
+    cache_key = (
+        fkey, mode, tuple(picks), round(max_w, 4), round(target_ret, 4),
+        tuple((round(lo, 4), round(hi, 4)) for lo, hi in (bounds or [])),
+        None if sector_limit is None else round(sector_limit, 4),
+        default_start(), default_end(),
+    )
+    pf_cache = st.session_state.get("pf_cache")
+    if pf_cache is not None and pf_cache["key"] == cache_key:
+        prices_dict, ret, opt = pf_cache["prices_dict"], pf_cache["ret"], pf_cache["opt"]
+    else:
+        st.session_state.pop("pf_walk_summary", None)  # 参数/成分变了，作废旧样本外结果
+        with st.spinner("拉取成分行情并优化..."):
+            prices_dict = {}
+            for lbl in picks:
+                c = s[s["label"] == lbl]["code"].iloc[0]
+                nm = s[s["label"] == lbl]["name"].iloc[0]
+                h = c_fund_hist(c, fkey, default_start(), default_end())
+                if not h.empty:
+                    prices_dict[nm] = ind.to_price_series(h)
+            if len(prices_dict) < 2:
+                st.warning("有效成分不足")
+                return
+            ret = pd.DataFrame({k: v.pct_change() for k, v in prices_dict.items()}).dropna()
+            mode_key = {"最大夏普": "max_sharpe", "最小方差": "min_variance",
+                        "目标收益": "target_return", "风险平价": "risk_parity"}[mode]
+            opt = pf.optimize_portfolio(ret, mode=mode_key,
+                                        target_return=(target_ret if mode == "目标收益" else None),
+                                        max_weight=max_w, bounds=bounds,
+                                        sector_limit=sector_limit, return_frontier=True)
+        st.session_state["pf_cache"] = {"key": cache_key, "prices_dict": prices_dict,
+                                        "ret": ret, "opt": opt}
 
     if opt.get("note"):
         st.warning(opt["note"])
@@ -1065,7 +1076,6 @@ def page_allocation():
 
     if submitted:
         st.session_state["alloc_done"] = True
-        st.session_state.pop("alloc_rb", None)  # 重新配置后作废旧的再平衡结果
     if not st.session_state.get("alloc_done", False):
         st.info("设置好日期、配置方法与目标波动率后，点击「开始配置」。")
         return
@@ -1075,18 +1085,32 @@ def page_allocation():
         return
     start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
-    with st.spinner("拉取大类资产行情..."):
-        prices_dict, ret = allocation.asset_class_returns(start, end)
-
-    if ret.empty or ret.shape[1] < 2:
-        st.warning("大类资产行情数据不足，请扩大区间或稍后重试。")
-        return
+    # 缓存配置计算结果：后续点击「再平衡回测」等按钮触发 rerun 时命中缓存，避免整页重算灰屏
+    cache_key = (start, end, method, round(target_vol, 4))
+    alloc_cache = st.session_state.get("alloc_cache")
+    if alloc_cache is not None and alloc_cache["key"] == cache_key:
+        prices_dict = alloc_cache["prices_dict"]
+        ret = alloc_cache["ret"]
+        weights = alloc_cache["weights"]
+        stats = alloc_cache["stats"]
+        summary_df = alloc_cache["summary_df"]
+    else:
+        st.session_state.pop("alloc_rb", None)  # 参数变了，作废旧再平衡结果
+        with st.spinner("拉取大类资产行情..."):
+            prices_dict, ret = allocation.asset_class_returns(start, end)
+        if ret.empty or ret.shape[1] < 2:
+            st.warning("大类资产行情数据不足，请扩大区间或稍后重试。")
+            return
+        weights, stats = allocation.method_perf(ret, method, target_vol)
+        summary_df = allocation.allocation_summary(ret, target_vol=target_vol)
+        st.session_state["alloc_cache"] = {"key": cache_key, "prices_dict": prices_dict,
+                                           "ret": ret, "weights": weights,
+                                           "stats": stats, "summary_df": summary_df}
 
     st.markdown("#### 各类资产历史走势（归一化 = 1）")
     st.plotly_chart(charts.price_line(prices_dict, "大类资产归一化走势"), width="stretch")
 
     st.markdown("#### 目标配置权重")
-    weights, stats = allocation.method_perf(ret, method, target_vol)
     w1, w2 = st.columns([1, 1])
     with w1:
         st.plotly_chart(charts.pie_chart(weights), width="stretch")
@@ -1101,7 +1125,7 @@ def page_allocation():
         full_table(wdf)
 
     st.markdown("#### 各配置方法绩效对比（全样本）")
-    full_table(allocation.allocation_summary(ret, target_vol=target_vol))
+    full_table(summary_df)
 
     st.markdown("#### 再平衡回测（vs 买入持有）")
     freq_map = {"月度": 21, "季度": 63, "年度": 252}
