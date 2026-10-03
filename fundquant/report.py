@@ -255,9 +255,33 @@ def build_compare_report_html(names: list, metrics_map: dict, score_map: dict,
     return _HTML_HEAD.format(title="基金横向对比报告") + body + _HTML_FOOT
 
 
+def _df_table(df: pd.DataFrame, pct_cols: set = None) -> str:
+    """将 DataFrame 渲染为 HTML 表格（用于样本外/再平衡等补充对比）。"""
+    if df is None or len(df) == 0:
+        return "<p>无可用数据。</p>"
+    pct_cols = pct_cols or set()
+    head = "".join(f"<th>{c}</th>" for c in df.columns)
+    rows = []
+    for _, r in df.iterrows():
+        cells = []
+        for c in df.columns:
+            v = r[c]
+            if isinstance(v, (int, float)):
+                if pd.isna(v):
+                    cells.append("<td>—</td>")
+                else:
+                    suffix = "%" if c in pct_cols else ""
+                    cells.append(f"<td>{v:.2f}{suffix}</td>")
+            else:
+                cells.append(f"<td>{v}</td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return f"<table><tr>{head}</tr>{''.join(rows)}</table>"
+
+
 def build_portfolio_report_html(opt: dict, ret: pd.DataFrame, prices_dict: dict,
-                                 method: str, mode_label: str) -> str:
-    """生成组合优化结果报告 HTML。"""
+                                 method: str, mode_label: str,
+                                 walk_forward: pd.DataFrame = None) -> str:
+    """生成组合优化结果报告 HTML（可选附带样本外回测对比）。"""
     st = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
     w = opt["weights"]
     stats = opt.get("stats", {})
@@ -307,6 +331,13 @@ def build_portfolio_report_html(opt: dict, ret: pd.DataFrame, prices_dict: dict,
     if note:
         body += f'<div class="warn">{note}</div>'
 
+    if walk_forward is not None and len(walk_forward):
+        body += f"""
+<h2>优化方法样本外回测对比</h2>
+{_df_table(walk_forward, pct_cols={"年化收益", "年化波动率", "最大回撤", "VaR95", "CVaR95"})}
+<p>上表按夏普比率降序排列，样本外表现最优的优化方法为 <strong>{walk_forward.iloc[0]['方法']}</strong>。</p>
+"""
+
     return _HTML_HEAD.format(title="组合优化报告") + body + _HTML_FOOT
 
 
@@ -322,8 +353,9 @@ def _corr_table(corr, names) -> str:
 
 
 def build_allocation_report_html(method: str, weights: dict, stats: dict,
-                                  prices_dict: dict = None) -> str:
-    """生成大类资产配置结果报告 HTML。"""
+                                  prices_dict: dict = None,
+                                  rebalance: pd.DataFrame = None) -> str:
+    """生成大类资产配置结果报告 HTML（可选附带再平衡回测对比）。"""
     st = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
     w_rows = "".join(
         f"<tr><td>{k}</td><td>{v*100:.1f}%</td></tr>"
@@ -350,6 +382,11 @@ def build_allocation_report_html(method: str, weights: dict, stats: dict,
 
 <h2>组合绩效指标</h2>
 <table><tr><th>指标</th><th>数值</th></tr>{stat_rows}</table>
+"""
+    if rebalance is not None and len(rebalance):
+        body += f"""
+<h2>再平衡回测（vs 买入持有）</h2>
+{_df_table(rebalance, pct_cols={"年化收益", "年化波动率", "最大回撤", "VaR95", "CVaR95"})}
 """
     return _HTML_HEAD.format(title="大类资产配置报告") + body + _HTML_FOOT
 

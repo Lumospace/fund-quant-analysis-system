@@ -937,6 +937,7 @@ def page_portfolio():
 
     if submitted:
         st.session_state["pf_done"] = True
+        st.session_state.pop("pf_walk_summary", None)  # 重新优化后作废旧的样本外结果
     if not st.session_state.get("pf_done", False):
         st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
         return
@@ -1000,13 +1001,6 @@ def page_portfolio():
     st.plotly_chart(charts.price_line({"组合": nav}, "组合净值（起点=1）", normalize=False),
                     width="stretch")
 
-    pf_html = report.build_portfolio_report_html(
-        opt, ret, prices_dict, mode,
-        {"最大夏普": "最大夏普比率", "最小方差": "最小方差",
-         "目标收益": "目标收益优化", "风险平价": "风险平价"}.get(mode, mode))
-    st.download_button("下载组合优化报告（HTML）", data=pf_html,
-                       file_name=f"portfolio_{pd.Timestamp.now():%Y%m%d}.html")
-
     # ---- 优化方法横向回测对比（滚动样本外） ----
     st.markdown("#### 优化方法横向回测对比（样本外）")
     st.caption("滚动训练窗口、逐步外推，评估各优化方法的样本外表现，避免仅看一次全样本"
@@ -1023,9 +1017,11 @@ def page_portfolio():
                 train_window=train_win, step=step, max_weight=max_w,
                 sector_limit=sector_limit)
         if not wf:
+            st.session_state.pop("pf_walk_summary", None)
             st.warning("历史数据不足以进行滚动样本外回测（需超过训练窗口+调仓步长）。")
         else:
             summary = pf.walk_forward_summary(wf)
+            st.session_state["pf_walk_summary"] = summary
             st.markdown("**样本外绩效对比**（年化收益/回撤/波动/VaR/CVaR 单位：%）")
             full_table(summary)
             navs = {k: v["nav"] for k, v in wf.items()}
@@ -1033,6 +1029,15 @@ def page_portfolio():
                                              normalize=False), width="stretch")
             best = summary.iloc[0]["方法"]
             st.success(f"样本外表现最优（按夏普比率）：**{best}**")
+
+    walk_summary = st.session_state.get("pf_walk_summary")
+    pf_html = report.build_portfolio_report_html(
+        opt, ret, prices_dict, mode,
+        {"最大夏普": "最大夏普比率", "最小方差": "最小方差",
+         "目标收益": "目标收益优化", "风险平价": "风险平价"}.get(mode, mode),
+        walk_forward=walk_summary)
+    st.download_button("下载组合优化报告（HTML）", data=pf_html,
+                       file_name=f"portfolio_{pd.Timestamp.now():%Y%m%d}.html")
 
 
 # ==================== 页面 7：大类资产配置 ====================
@@ -1060,6 +1065,7 @@ def page_allocation():
 
     if submitted:
         st.session_state["alloc_done"] = True
+        st.session_state.pop("alloc_rb", None)  # 重新配置后作废旧的再平衡结果
     if not st.session_state.get("alloc_done", False):
         st.info("设置好日期、配置方法与目标波动率后，点击「开始配置」。")
         return
@@ -1110,12 +1116,15 @@ def page_allocation():
                                                rebalance_days=freq_map[freq],
                                                lookback=lookback)
         if not rb:
+            st.session_state.pop("alloc_rb", None)
             st.warning("历史数据不足以进行再平衡回测（需超过观察窗口+再平衡周期）。")
         else:
             navs = {k: v["nav"] for k, v in rb.items()}
             st.plotly_chart(charts.price_line(navs, "再平衡 vs 买入持有（起点=1）", normalize=False),
                             width="stretch")
-            full_table(pd.DataFrame([{"策略": k, **v["stats"]} for k, v in rb.items()]))
+            rb_df = pd.DataFrame([{"策略": k, **v["stats"]} for k, v in rb.items()])
+            st.session_state["alloc_rb"] = rb_df
+            full_table(rb_df)
             rb_s, bh_s = rb["再平衡"]["stats"], rb["买入持有"]["stats"]
             if rb_s["夏普比率"] >= bh_s["夏普比率"]:
                 st.success(f"再平衡夏普 {rb_s['夏普比率']:.2f} ≥ 买入持有 {bh_s['夏普比率']:.2f}，"
@@ -1124,11 +1133,12 @@ def page_allocation():
                 st.info(f"再平衡夏普 {rb_s['夏普比率']:.2f} < 买入持有 {bh_s['夏普比率']:.2f}，"
                         f"受趋势/交易成本影响，本次区间再平衡未跑赢。")
 
-    alloc_html = report.build_allocation_report_html(method, weights, stats)
+    st.caption(config.RISK_DISCLAIMER)
+
+    alloc_html = report.build_allocation_report_html(method, weights, stats,
+                                                     rebalance=st.session_state.get("alloc_rb"))
     st.download_button("下载大类资产配置报告（HTML）", data=alloc_html,
                        file_name=f"allocation_{pd.Timestamp.now():%Y%m%d}.html")
-
-    st.caption(config.RISK_DISCLAIMER)
 
 
 # ==================== 页面 8：定投测算 ====================
@@ -1341,10 +1351,11 @@ def page_stress(preset_mode=None):
         else:
             default_codes = s["code"].astype(str).head(3).tolist()
         labels = s[s["code"].astype(str).isin(default_codes)]["label"].tolist()
-        picks = st.multiselect("选择成分基金", s["label"].tolist(),
+        picks = st.multiselect("选择成分基金（可搜索）", s["label"].tolist(),
                                default=labels or s["label"].tolist()[:3], key="stress_picks")
         if len(picks) < 2:
             st.info("请至少选 2 只"); return
+        # 预取成分行情（缓存）用于渲染权重输入
         prices_dict = {}
         for lbl in picks:
             c = s[s["label"] == lbl]["code"].iloc[0]
@@ -1352,14 +1363,23 @@ def page_stress(preset_mode=None):
             h = c_fund_hist(c, fkey, "20150101", default_end())
             if not h.empty:
                 prices_dict[nm] = ind.to_price_series(h)
-        st.markdown("**设置各基金比例（自动归一化为 100%）**")
-        raw_w = {}
-        wcols = st.columns(min(len(prices_dict), 4))
-        for i, (nm, _) in enumerate(prices_dict.items()):
-            with wcols[i % len(wcols)]:
-                raw_w[nm] = st.number_input(f"{nm}", 0.0, 100.0,
-                                            round(100.0 / len(prices_dict), 2), 1.0,
-                                            key=f"stress_w_{i}", format="%.1f")
+        if len(prices_dict) < 2:
+            st.warning("有效成分不足"); return
+        with st.form("stress_port_form"):
+            st.markdown("**设置各基金比例（自动归一化为 100%）**")
+            raw_w = {}
+            wcols = st.columns(min(len(prices_dict), 4))
+            for i, (nm, _) in enumerate(prices_dict.items()):
+                with wcols[i % len(wcols)]:
+                    raw_w[nm] = st.number_input(f"{nm}", 0.0, 100.0,
+                                                round(100.0 / len(prices_dict), 2), 1.0,
+                                                key=f"stress_w_{i}", format="%.1f")
+            submitted = st.form_submit_button("开始压力测试", type="primary", use_container_width=True)
+        if submitted:
+            st.session_state["stress_port_done"] = True
+        if not st.session_state.get("stress_port_done", False):
+            st.info("设置各基金比例后，点击「开始压力测试」。")
+            return
         total_w = sum(raw_w.values())
         weights = ({k: v / total_w for k, v in raw_w.items()} if total_w > 0
                    else {k: 1.0 / len(raw_w) for k in raw_w})
