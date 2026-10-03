@@ -99,6 +99,26 @@ def inject_css():
         background-color: {C['card_bg']} !important;
         border: 1px solid {C['card_border']} !important;
     }}
+    /* 日期选择日历弹窗 / 下拉菜单等弹出层：深底亮字 */
+    .stApp [data-baseweb="popover"] {{
+        background: {C['card_bg']} !important;
+    }}
+    .stApp [data-baseweb="calendar"] {{
+        background: {C['card_bg']} !important;
+    }}
+    .stApp [data-baseweb="calendar"] button,
+    .stApp [data-baseweb="calendar"] [data-baseweb="calendar-header"] {{
+        color: {C['text']} !important;
+    }}
+    .stApp [data-baseweb="popover"] [data-baseweb="menu"] li {{
+        background: {C['card_bg']} !important;
+        color: {C['text']} !important;
+    }}
+    /* 多选已选标签（tag）：深色半透明底 + 亮字 */
+    .stApp [data-baseweb="tag"] {{
+        background: rgba(255,255,255,0.08) !important;
+        color: {C['text']} !important;
+    }}
     /* 侧栏导航按钮：深色半透明底 + 亮字；当前项主题色高亮 */
     [data-testid="stSidebar"] [data-testid="stButton"] > button {{
         color: {C['text']} !important;
