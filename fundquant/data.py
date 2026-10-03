@@ -79,8 +79,12 @@ def cache_mtime(key: str):
         return None
 
 
-def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, **kwargs):
-    """统一调用封装：先读缓存 -> 调用 -> 失败重试 -> 缓存写入 -> 失败降级返回空。"""
+def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, allow_stale=True, **kwargs):
+    """统一调用封装：先读缓存 -> 调用 -> 失败重试 -> 缓存写入 -> 失败降级返回空。
+
+    allow_stale=False 时，失败后不再返回过期缓存（用于不能容忍过期数据的
+    实时行情，以及需要触发次级数据源降级的场景）。
+    """
     cached = _load_cache(key, ttl)
     if cached is not None:
         return cached
@@ -97,6 +101,8 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, **kwargs):
         except (OSError, ValueError, KeyError, TypeError) as e:
             last = e
             time.sleep(0.6 * (i + 1))
+    if not allow_stale:
+        return pd.DataFrame()
     # 降级：尝试读取过期缓存（最多容忍 30 天过期的数据）
     STALE_MAX_TTL = 30 * 24 * 3600
     stale = _load_cache(key, ttl=STALE_MAX_TTL)
@@ -127,11 +133,24 @@ def get_etf_spot(force: bool = False):
     """ETF 实时行情列表。东财优先，被反爬断链时自动降级新浪源。支持强制刷新。"""
     import akshare as ak
     if force:
-        clear_cache("etf_spot")
-    df = _call_ak(ak.fund_etf_spot_em, "etf_spot", ttl=config.CACHE_TTL["spot"], retries=1)
+        clear_etf_spot_cache()
+    # 东财主源：实时行情不允许用过期缓存兜底（否则降级分支永远不触发）
+    df = _call_ak(ak.fund_etf_spot_em, ETF_SPOT_EM_KEY, ttl=config.CACHE_TTL["spot"],
+                  retries=1, allow_stale=False)
     if df is None or df.empty:
-        df = _call_ak(_etf_spot_sina, "etf_spot", ttl=config.CACHE_TTL["spot"])
+        df = _call_ak(_etf_spot_sina, ETF_SPOT_SINA_KEY, ttl=config.CACHE_TTL["spot"])
     return _clean_etf_spot(df)
+
+
+# 东财 / 新浪 实时行情使用独立缓存键，避免东财成功缓存后污染新浪降级源
+ETF_SPOT_EM_KEY = "etf_spot_em"
+ETF_SPOT_SINA_KEY = "etf_spot_sina"
+
+
+def clear_etf_spot_cache():
+    """清除 ETF 实时行情的两个数据源缓存（东财主源 + 新浪降级源）。"""
+    clear_cache(ETF_SPOT_EM_KEY)
+    clear_cache(ETF_SPOT_SINA_KEY)
 
 
 def clear_cache(key: str = None):

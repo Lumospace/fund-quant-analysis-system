@@ -412,7 +412,7 @@ def page_dashboard():
         if st.button("刷新实时行情", width="stretch"):
             c_fund_universe.clear()
             c_otc_estimation.clear()
-            data.clear_cache("etf_spot")
+            data.clear_etf_spot_cache()
             data.clear_cache("otc_value_est")
             st.session_state["_refreshed_at"] = _dt.datetime.now()
             st.rerun()
