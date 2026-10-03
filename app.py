@@ -491,9 +491,12 @@ def page_profile():
     code, name, fkey = cur_fund()
     c1, c2 = st.columns([1, 1])
     with c1:
-        start = st.text_input("开始日期(YYYYMMDD)", default_start(), key="prof_start")
+        start = st.date_input("开始日期", value=_dt.date.today() - _dt.timedelta(days=3 * 365),
+                              min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
     with c2:
-        end = st.text_input("结束日期(YYYYMMDD)", default_end(), key="prof_end")
+        end = st.date_input("结束日期", value=_dt.date.today(),
+                            min_value=start, max_value=_dt.date.today())
+    start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
     res = c_analysis(code, fkey, name, start, end)
     if res is None:
@@ -1067,9 +1070,12 @@ def page_allocation():
 
     c1, c2 = st.columns(2)
     with c1:
-        start = st.text_input("开始日期(YYYYMMDD)", "20150101")
+        start = st.date_input("开始日期", value=_dt.date(2015, 1, 1),
+                              min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
     with c2:
-        end = st.text_input("结束日期(YYYYMMDD)", default_end())
+        end = st.date_input("结束日期", value=_dt.date.today(),
+                            min_value=start, max_value=_dt.date.today())
+    start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
     with st.spinner("拉取大类资产行情..."):
         prices_dict, ret = allocation.asset_class_returns(start, end)
@@ -1218,10 +1224,12 @@ def page_backtest():
 
     c1, c2 = st.columns([1, 1])
     with c1:
-        start = st.text_input("开始日期(YYYYMMDD)",
-                              (_dt.date.today() - _dt.timedelta(days=5 * 365)).strftime("%Y%m%d"))
+        start = st.date_input("开始日期", value=_dt.date.today() - _dt.timedelta(days=5 * 365),
+                              min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
     with c2:
-        end = st.text_input("结束日期(YYYYMMDD)", default_end())
+        end = st.date_input("结束日期", value=_dt.date.today(),
+                            min_value=start, max_value=_dt.date.today())
+    start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
     st.markdown("#### 交易成本（择时策略计入 · 单位：万分之几）")
     t1, t2 = st.columns([1, 1])
