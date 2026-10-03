@@ -15,9 +15,14 @@ import config
 
 
 def _build_features(prices: pd.Series, hist: pd.DataFrame,
-                    pe_hist: pd.DataFrame = None) -> pd.DataFrame:
-    """构造特征矩阵（对齐价格索引）；pe_hist 供真实估值分位特征使用。"""
-    ff = fac.compute_factor_frame(prices, hist, pe_hist)
+                    pe_hist: pd.DataFrame = None,
+                    ff: pd.DataFrame = None) -> pd.DataFrame:
+    """构造特征矩阵（对齐价格索引）；pe_hist 供真实估值分位特征使用。
+
+    ff 传入时复用已计算的因子矩阵，避免重复滚动计算。
+    """
+    if ff is None:
+        ff = fac.compute_factor_frame(prices, hist, pe_hist)
     r = prices.pct_change()
     feats = pd.DataFrame(index=prices.index)
     # 技术特征
@@ -158,12 +163,13 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
 
 
 def forecast(prices: pd.Series, hist: pd.DataFrame, horizon: int = 20,
-             verbose: bool = False, pe_hist: pd.DataFrame = None) -> dict:
+             verbose: bool = False, pe_hist: pd.DataFrame = None,
+             ff: pd.DataFrame = None) -> dict:
     """预测未来 horizon 日涨跌概率（单周期入口）。
 
     返回: prob_up, prob_down, expected_return, confidence, auc, importance, n_train, n_test, method
     """
-    X_full = _build_features(prices, hist, pe_hist)
+    X_full = _build_features(prices, hist, pe_hist, ff)
     X, y = _make_dataset(X_full, prices, horizon)
     if X is None:
         return _fallback(prices, horizon, "样本不足")
@@ -192,9 +198,10 @@ def _fallback(prices: pd.Series, horizon: int, reason: str) -> dict:
 
 def multi_horizon_forecast(prices: pd.Series, hist: pd.DataFrame,
                            horizons=(7, 20, 60, 120),
-                           pe_hist: pd.DataFrame = None) -> dict:
+                           pe_hist: pd.DataFrame = None,
+                           ff: pd.DataFrame = None) -> dict:
     """多周期概率预测。特征矩阵只构建一次，各周期复用（仅标签不同）。"""
-    X_full = _build_features(prices, hist, pe_hist)
+    X_full = _build_features(prices, hist, pe_hist, ff)
     out = {}
     for h in horizons:
         if len(prices) < h * 3:
@@ -235,13 +242,14 @@ def trend_signals(prices: pd.Series) -> dict:
 def calibration_curve_data(prices: pd.Series, hist: pd.DataFrame,
                            pe_hist: pd.DataFrame = None,
                            horizon: int = 20,
-                           n_bins: int = 10) -> dict:
+                           n_bins: int = 10,
+                           ff: pd.DataFrame = None) -> dict:
     """概率校准曲线数据（Reliability Diagram）。
 
     使用 walk-forward 样本外概率，按预测概率分桶，计算每桶内实际正样本占比。
     返回 {bin_label: {pred_min, pred_max, pred_mean, actual_freq, count}}
     """
-    X_full = _build_features(prices, hist, pe_hist)
+    X_full = _build_features(prices, hist, pe_hist, ff)
     X, y = _make_dataset(X_full, prices, horizon)
     if X is None or len(X) < 60:
         return {}

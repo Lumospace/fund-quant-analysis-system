@@ -173,14 +173,16 @@ def c_analysis(code, fkey, name, start, end):
     metrics = ind.compute_fund_metrics(hist, pe_hist=pe_hist)
     if not metrics:
         return None
-    ic_ts, cum_ic = fac.ic_time_series(prices, hist, pe_hist=pe_hist)
-    fcorr = fac.factor_correlation_matrix(prices, hist, pe_hist=pe_hist)
+    # 因子矩阵只算一次，供 IC 时序/相关性/因子校验/AI 预测复用，消除重复滚动计算
+    ff = fac.compute_factor_frame(prices, hist, pe_hist)
+    ic_ts, cum_ic = fac.ic_time_series(prices, hist, pe_hist=pe_hist, ff=ff)
+    fcorr = fac.factor_correlation_matrix(prices, hist, pe_hist=pe_hist, ff=ff)
     fwarn = fac.high_correlation_warning(fcorr)
     return {
         "hist": hist, "prices": prices, "metrics": metrics,
-        "fval": fac.validate_factors(prices, hist, pe_hist=pe_hist),
+        "fval": fac.validate_factors(prices, hist, pe_hist=pe_hist, ff=ff),
         "trend": predict.trend_signals(prices),
-        "pred": predict.forecast(prices, hist, horizon=20, pe_hist=pe_hist),
+        "pred": predict.forecast(prices, hist, horizon=20, pe_hist=pe_hist, ff=ff),
         "ic_ts": ic_ts, "cum_ic": cum_ic, "fcorr": fcorr, "fwarn": fwarn,
     }
 
@@ -193,7 +195,9 @@ def c_forecast(code, fkey, name, start, end):
         return None, None
     prices = ind.to_price_series(hist)
     pe_hist = data.get_fund_pe_history(code, name)
-    mc = predict.multi_horizon_forecast(prices, hist, horizons=(7, 20, 60, 120), pe_hist=pe_hist)
+    ff = fac.compute_factor_frame(prices, hist, pe_hist)
+    mc = predict.multi_horizon_forecast(prices, hist, horizons=(7, 20, 60, 120),
+                                        pe_hist=pe_hist, ff=ff)
     trend = predict.trend_signals(prices)
     return mc, trend
 
@@ -206,7 +210,9 @@ def c_calibration(code, fkey, name, start, end):
         return {}
     prices = ind.to_price_series(hist)
     pe_hist = data.get_fund_pe_history(code, name)
-    return predict.calibration_curve_data(prices, hist, pe_hist, horizon=20, n_bins=10)
+    ff = fac.compute_factor_frame(prices, hist, pe_hist)
+    return predict.calibration_curve_data(prices, hist, pe_hist, horizon=20, n_bins=10,
+                                          ff=ff)
 
 
 def default_start():

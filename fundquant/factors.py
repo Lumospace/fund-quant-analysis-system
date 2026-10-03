@@ -338,12 +338,15 @@ def factor_monotonicity(factor: pd.Series, forward_ret: pd.Series, n_group: int 
 
 def validate_factors(prices: pd.Series, hist: pd.DataFrame,
                      forward: int = 20, ic_threshold: float = 0.02,
-                     down_months: int = 3, pe_hist: pd.DataFrame = None) -> pd.DataFrame:
+                     down_months: int = 3, pe_hist: pd.DataFrame = None,
+                     ff: pd.DataFrame = None) -> pd.DataFrame:
     """因子自动校验：返回每个因子的 IC/IR/胜率/单调性 与 状态。
 
     连续 down_months 个月 IC 绝对值低于阈值 -> 自动下线（状态=已下线）。
+    传入 ff 可复用已计算的因子矩阵，避免多次重复滚动计算。
     """
-    ff = compute_factor_frame(prices, hist, pe_hist)
+    if ff is None:
+        ff = compute_factor_frame(prices, hist, pe_hist)
     fwd = prices.pct_change(forward).shift(-forward)  # 未来 forward 日收益
 
     rows = []
@@ -410,7 +413,8 @@ def validate_factors(prices: pd.Series, hist: pd.DataFrame,
 
 
 def ic_time_series(prices: pd.Series, hist: pd.DataFrame, forward: int = 20,
-                   window: int = 60, step: int = 10, pe_hist: pd.DataFrame = None):
+                   window: int = 60, step: int = 10, pe_hist: pd.DataFrame = None,
+                   ff: pd.DataFrame = None):
     """因子滚动 IC 时序 + 累计 IC 曲线。
 
     对每个因子，在滚动 window 交易日内计算因子值与未来 forward 日收益的
@@ -418,7 +422,8 @@ def ic_time_series(prices: pd.Series, hist: pd.DataFrame, forward: int = 20,
     累计 IC 持续上行代表该因子方向长期稳定有效。
     返回 (ic_frame, cum_ic_frame)：index 为采样日期，columns 为因子中文名。
     """
-    ff = compute_factor_frame(prices, hist, pe_hist)
+    if ff is None:
+        ff = compute_factor_frame(prices, hist, pe_hist)
     fwd = prices.pct_change(forward).shift(-forward)
     name_map = {k: f.name for k, f in FACTORS.items()}
     idx = list(ff.index)
@@ -452,12 +457,14 @@ def effective_factor_keys(prices: pd.Series, hist: pd.DataFrame,
 
 
 def factor_correlation_matrix(prices: pd.Series, hist: pd.DataFrame,
-                               pe_hist: pd.DataFrame = None) -> pd.DataFrame:
+                               pe_hist: pd.DataFrame = None,
+                               ff: pd.DataFrame = None) -> pd.DataFrame:
     """计算各因子间的 Spearman 相关系数矩阵，用于发现冗余因子对。
 
     返回 DataFrame，index/columns 均为因子中文名。
     """
-    ff = compute_factor_frame(prices, hist, pe_hist)
+    if ff is None:
+        ff = compute_factor_frame(prices, hist, pe_hist)
     if ff.empty or ff.shape[1] < 2:
         return pd.DataFrame()
     name_map = {k: f.name for k, f in FACTORS.items()}
