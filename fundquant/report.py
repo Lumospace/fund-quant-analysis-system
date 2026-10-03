@@ -184,7 +184,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 {metrics_markdown_html(metrics)}
 <h2>六、AI 多周期预测</h2>
 <table><tr><th>周期</th><th>上涨概率</th><th>下跌概率</th><th>置信度</th><th>预期收益</th><th>收益区间(10%~90%)</th></tr>{_forecast_rows(forecasts)}</table>
-<h2>七、压力测试四情景</h2>
+<h2>七、压力测试情景</h2>
 <table><tr><th>情景</th><th>最大回撤</th><th>缩水幅度</th><th>年化波动率</th><th>修复周期</th><th>说明</th></tr>{_stress_rows(stress)}</table>
 <h2>八、落地操作建议</h2>
 <table><tr><th>项目</th><th>内容</th></tr>{advice_rows}</table>

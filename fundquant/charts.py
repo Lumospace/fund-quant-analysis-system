@@ -82,7 +82,7 @@ def drawdown_chart(prices_or_nav: pd.Series, title="回撤走势"):
     return _base(fig, title, showlegend=False)
 
 
-def radar_chart(metrics: dict, title="风险收益雷达"):
+def radar_chart(metrics: dict, title="四维评分雷达"):
     """四维评分雷达。"""
     dims = ["收益", "风险", "估值", "稳定性"]
     vals = []

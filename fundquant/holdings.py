@@ -89,7 +89,7 @@ def stock_lookthrough(holdings: pd.DataFrame) -> dict:
             "行业": industry,
             "占净值比例%": rec["w"],
             "总市值(亿)": round(mc_yi, 1) if mc_yi > 0 else None,
-            "PE(动态)": (round(pe, 2) if pe is not None else None),
+            "市盈率(动态)": (round(pe, 2) if pe is not None else None),
             "规模风格": _classify_size(mc_yi if mc_yi > 0 else None),
             "估值风格": _classify_value(pe),
         }

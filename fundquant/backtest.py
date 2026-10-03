@@ -2,7 +2,7 @@
 """历史回测与策略对比子模块。
 
 在同一只基金的历史行情上并行运行多套经典策略，输出统一的归一化净值、
-绩效指标（总收益/年化收益/年化波动/夏普/最大回撤/Calmar/交易次数），
+绩效指标（总收益/年化收益/年化波动/夏普/最大回撤/卡玛比率/交易次数），
 支持横向对比与净值/回撤叠加可视化。
 
 内置五套策略：
@@ -47,7 +47,7 @@ def _nav_stats(nav: pd.Series, trades: int = 0, ann: float = None) -> dict:
         "年化波动": vol,
         "夏普比率": sharpe,
         "最大回撤": mdd,
-        "Calmar": calmar,
+        "卡玛比率": calmar,
         "交易次数": int(trades),
     }
 
@@ -157,7 +157,7 @@ def _summary(results: dict) -> pd.DataFrame:
             "年化波动": st.get("年化波动", np.nan),
             "夏普比率": st.get("夏普比率", np.nan),
             "最大回撤": st.get("最大回撤", np.nan),
-            "Calmar": st.get("Calmar", np.nan),
+            "卡玛比率": st.get("卡玛比率", np.nan),
             "交易次数": st.get("交易次数", np.nan),
         })
     return pd.DataFrame(rows)

@@ -560,7 +560,7 @@ def page_profile():
             ("年化收益", "年化收益%"), ("最大回撤", "最大回撤%"),
             ("夏普比率", "夏普比率"), ("估值分位", "估值分位%"),
             ("年化波动率", "年化波动%"), ("近1年", "近1年%"),
-            ("索提诺比率", "索提诺比率"), ("最长回撤天数", "最长回撤修复周期"),
+            ("索提诺比率", "索提诺比率"), ("最长回撤天数", "最长回撤天数"),
         ])
 
         st.markdown(f"#### 综合评分：{score['total']} 分 <span class='badge'>{score['rating']}</span> "
@@ -673,15 +673,15 @@ def page_profile():
             deviation = float(price_pct - _vp_pe / 100)
             _m1, _m2, _m3 = st.columns(3)
             _m1.metric("价格分位", f"{price_pct:.0%}")
-            _m2.metric("PE分位", f"{_vp_pe/100:.0%}")
+            _m2.metric("估值分位", f"{_vp_pe/100:.0%}")
             _m3.metric("偏离度", f"{deviation:+.0%}")
             if abs(deviation) < 0.15:
-                st.info(f"**正常**：价格分位({price_pct:.0%}) ≈ PE分位({_vp_pe/100:.0%})，估值定价一致")
+                st.info(f"**正常**：价格分位({price_pct:.0%}) ≈ 估值分位({_vp_pe/100:.0%})，估值定价一致")
             elif deviation > 0.15:
-                st.error(f"**偏高估**：价格分位({price_pct:.0%}) 显著高于 PE分位({_vp_pe/100:.0%})，"
+                st.error(f"**偏高估**：价格分位({price_pct:.0%}) 显著高于 估值分位({_vp_pe/100:.0%})，"
                          f"偏离 {deviation:.0%}，市场情绪可能过度乐观")
             else:
-                st.success(f"**偏低估**：价格分位({price_pct:.0%}) 显著低于 PE分位({_vp_pe/100:.0%})，"
+                st.success(f"**偏低估**：价格分位({price_pct:.0%}) 显著低于 估值分位({_vp_pe/100:.0%})，"
                            f"偏离 {-deviation:.0%}，基本面支撑高于市场定价")
         else:
             st.caption("估值分位数据不足（基金需有可识别的跟踪指数且 PE 历史 >36 条），无法计算估值偏离。")
@@ -762,7 +762,7 @@ def page_screener():
             st.warning("数据拉取失败。")
             return
         scored = scoring.score_universe(rank)
-        st.markdown(f"共 {len(scored)} 只场外基金，按综合评分排序（收益维度分位，风险需点开单基金详查）")
+        st.markdown(f"共 {len(scored)} 只场外基金，按综合评分排序（现仅基于收益维度；风险评估需进入单基金详查）")
         show = scored[scored["综合评分"] >= min_score].copy()
         cols = [c for c in ["code", "name", "m1", "m3", "m6", "y1", "ytd", "综合评分", "评级"] if c in show.columns]
         show.insert(0, "排名", range(1, len(show) + 1))
@@ -1078,7 +1078,7 @@ def page_portfolio():
 # ==================== 页面 7：大类资产配置 ====================
 def page_allocation():
     st.header("大类资产配置")
-    st.caption("基于 股票/债券/黄金/现金 四类代表性 ETF（沪深300 / 国债 / 黄金 / 货币）真实行情，"
+    st.caption("基于 股票/债券/黄金/现金 四类代表性 ETF（沪深300 / 国债 / 黄金 / 货币ETF）真实行情，"
                "提供跨资产配置与周期性再平衡回测。")
 
     with st.form("alloc_form"):
@@ -1351,7 +1351,7 @@ def page_backtest():
     show["年化波动"] = show["年化波动"].map(_pct)
     show["最大回撤"] = show["最大回撤"].map(_pct)
     show["夏普比率"] = show["夏普比率"].map(_num)
-    show["Calmar"] = show["Calmar"].map(_num)
+    show["卡玛比率"] = show["卡玛比率"].map(_num)
     show["交易次数"] = show["交易次数"].map(lambda v: f"{int(v)}" if pd.notna(v) else "--")
     st.dataframe(show, width="stretch", hide_index=True)
 
