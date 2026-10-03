@@ -967,6 +967,20 @@ def page_portfolio():
     if fkey == "otc":
         s = _search_narrow(s, "pf_search", max_rows=300)
 
+    # 回测时间区间（作用于单次优化、组合净值回测与滚动样本外回测）
+    d1, d2 = st.columns(2)
+    with d1:
+        start_d = st.date_input("开始日期",
+                                value=_dt.date.today() - _dt.timedelta(days=3 * 365),
+                                min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today(),
+                                on_change=_invalidate_pf)
+    with d2:
+        end_d = st.date_input("结束日期", value=_dt.date.today(),
+                              min_value=start_d, max_value=_dt.date.today(),
+                              on_change=_invalidate_pf)
+    start = start_d.strftime("%Y%m%d")
+    end = end_d.strftime("%Y%m%d")
+
     # 选择成分基金（多选）
     options = s["label"].tolist()
     default = options[:3] if len(options) >= 3 else options
@@ -1037,6 +1051,10 @@ def page_portfolio():
         st.warning("请至少选择 2 只基金构建组合。")
         return
 
+    if start_d >= end_d:
+        st.warning("开始日期需早于结束日期。")
+        return
+
     # 缓存主优化结果：后续点击「样本外回测」等按钮触发 rerun 时命中缓存，避免整页重算灰屏
     cache_key = (
         fkey, mode, tuple(picks), round(max_w, 4),
@@ -1044,7 +1062,7 @@ def page_portfolio():
         tuple((round(lo, 4), round(hi, 4)) for lo, hi in (bounds or [])),
         None if sector_limit is None else round(sector_limit, 4),
         None if budget is None else tuple(round(b, 4) for b in budget),
-        default_start(), default_end(),
+        start, end,
     )
     pf_cache = st.session_state.get("pf_cache")
     if pf_cache is not None and pf_cache["key"] == cache_key:
@@ -1056,7 +1074,7 @@ def page_portfolio():
             for lbl in picks:
                 c = s[s["label"] == lbl]["code"].iloc[0]
                 nm = s[s["label"] == lbl]["name"].iloc[0]
-                h = c_fund_hist(c, fkey, default_start(), default_end())
+                h = c_fund_hist(c, fkey, start, end)
                 if not h.empty:
                     prices_dict[nm] = ind.to_price_series(h)
             if len(prices_dict) < 2:
