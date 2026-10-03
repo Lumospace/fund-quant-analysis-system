@@ -1460,16 +1460,16 @@ PAGES = {
 
 
 def main():
-    inject_css()
-    import fundquant.charts as _charts
-    _charts._THEME = None if not st.session_state.dark_mode else _cur_colors()
     if "style" not in st.session_state:
         st.session_state.style = "稳健"
     if "horizon" not in st.session_state:
         st.session_state.horizon = "中期（1-3年）"
     if "fund_class" not in st.session_state:
         st.session_state.fund_class = "场内ETF"
-    page = sidebar()
+    page = sidebar()  # 此处会写入 st.session_state.dark_mode
+    inject_css()      # 基于最新 dark_mode 注入样式，避免主题滞后一次交互
+    import fundquant.charts as _charts
+    _charts.set_palette(st.session_state.dark_mode)
     try:
         PAGES[page]()
     except Exception as e:

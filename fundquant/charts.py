@@ -8,24 +8,33 @@ from plotly.subplots import make_subplots
 import config
 
 C = config.COLORS
-_THEME = None  # app.py 可通过 charts._THEME = dark_colors 全局切换
+_THEME = None  # 深色模式激活时指向 DARK_COLORS，否则为 None
+
+
+def set_palette(dark: bool = False):
+    """切换全局调色板（浅色/深色），使所有图表函数与 _base 统一取色。"""
+    global C, _THEME
+    C = config.DARK_COLORS if dark else config.COLORS
+    _THEME = C if dark else None
 
 
 def _base(fig, title="", height=380, showlegend=None, colors=None):
-    pal = colors or _THEME or C
+    pal = colors or C
+    is_dark = _THEME is not None or colors is not None
     fig.update_layout(
         title=dict(text=title, x=0.0, xanchor="left",
                    font=dict(size=15, color=pal["primary"])),
-        template="plotly_dark" if colors else "plotly_white",
+        template="plotly_dark" if is_dark else "plotly_white",
         height=height,
         margin=dict(l=50, r=20, t=50, b=40),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor=pal["bg"] if colors else "#ffffff",
+        plot_bgcolor=pal["bg"] if is_dark else "#ffffff",
         hovermode="x unified",
         hoverlabel=dict(bgcolor=pal["primary"], font_color="#ffffff", font_size=12),
         font=dict(color=pal["neutral"], size=12),
         legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="center", x=0.5,
-                    bgcolor="rgba(255,255,255,0.7)", font=dict(size=10)),
+                    bgcolor="rgba(30,41,59,0.7)" if is_dark else "rgba(255,255,255,0.7)",
+                    font=dict(size=10, color=pal["neutral"])),
         dragmode="zoom",
         modebar=dict(bgcolor="rgba(255,255,255,0.08)", color=pal["neutral"]),
     )
