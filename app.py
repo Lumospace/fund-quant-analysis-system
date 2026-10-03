@@ -14,7 +14,7 @@ import config
 from fundquant import data, indicators as ind, factors as fac, scoring, predict
 from fundquant import portfolio as pf, stress, dca, report, charts, backtest, allocation, holdings
 
-st.set_page_config(page_title="基金投资量化分析系统", page_icon=None,
+st.set_page_config(page_title="基金投资量化分析系统", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
 RISK = config.RISK_DISCLAIMER
@@ -705,9 +705,6 @@ def page_profile():
                     st.warning(f"高相关因子对：**{a}** ↔ **{b}**（ρ={v}），可能存在冗余")
             st.plotly_chart(charts.corr_heatmap(fcorr, title="因子间 Spearman 相关系数"),
                             width="stretch", key="prof_fac_corr")
-
-
-        st.info("样本外数据不足，无法绘制概率校准曲线（需要 ≥60 条训练样本且 ≥10 条 OOS 校验样本）。")
 
 
 # ==================== 页面 4：基金筛选优选 ====================
