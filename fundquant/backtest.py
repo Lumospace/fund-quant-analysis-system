@@ -30,11 +30,8 @@ def _nav_stats(nav: pd.Series, trades: int = 0, ann: float = None) -> dict:
     nav = pd.to_numeric(nav, errors="coerce").dropna()
     if len(nav) < 2 or nav.iloc[0] <= 0:
         return {}
-    if isinstance(nav.index, pd.DatetimeIndex) and nav.index[-1] > nav.index[0]:
-        yrs = (nav.index[-1] - nav.index[0]).days / 365.25
-    else:
-        yrs = len(nav) / config.TRADING_DAYS
-    yrs = yrs if isinstance(yrs, (int, float)) and yrs > 0 else len(nav) / config.TRADING_DAYS
+    # 年化年限统一按交易日数折算，与年化波动率 sqrt(252) 口径一致
+    yrs = (len(nav) - 1) / config.TRADING_DAYS
 
     total = float(nav.iloc[-1] / nav.iloc[0] - 1)
     if ann is None:

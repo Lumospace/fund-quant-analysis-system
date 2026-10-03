@@ -45,11 +45,9 @@ def annualized_return(prices: pd.Series) -> float:
     if len(prices) < 2:
         return 0.0
     total = cumulative_return(prices)
-    if hasattr(prices, "index") and isinstance(prices.index, pd.DatetimeIndex):
-        days = (prices.index[-1] - prices.index[0]).days
-        years = max(days, 1) / 365.0
-    else:
-        years = (len(prices) - 1) / config.TRADING_DAYS
+    # 年化统一按交易日数折算（与年化波动率 252 口径一致）；不按日历天数，否则会把
+    # 周末节假日计入年限、高估 years 从而低估 CAGR。
+    years = (len(prices) - 1) / config.TRADING_DAYS
     if years <= 0:
         return 0.0
     if total <= -1:
