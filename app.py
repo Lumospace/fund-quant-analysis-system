@@ -248,9 +248,10 @@ def default_end():
 
 
 # ==================== 通用组件 ====================
-def metric_card(label, value, color=None, suffix=""):
+def metric_card(label, value, color=None, suffix="", container=None):
     c = f"color:{color};" if color else ""
-    st.markdown(f"""<div class="metric-card"><div class="label">{label}</div>
+    target = container if container is not None else st
+    target.markdown(f"""<div class="metric-card"><div class="label">{label}</div>
         <div class="value" style="{c}">{value}{suffix}</div></div>""",
         unsafe_allow_html=True)
 
@@ -262,8 +263,7 @@ def render_metrics_row(metrics, keys_labels, per_row=4):
         for col, (k, label) in zip(cols, group):
             v = metrics.get(k, "--")
             v = "--" if v is None else v
-            col.markdown(f"""<div class="metric-card"><div class="label">{label}</div>
-                <div class="value">{v}</div></div>""", unsafe_allow_html=True)
+            metric_card(label, v, container=col)
 
 
 def full_table(df: pd.DataFrame):

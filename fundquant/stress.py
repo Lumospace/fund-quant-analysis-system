@@ -179,29 +179,42 @@ def _iterate_scenarios(full_ret, history_fn, with_paths=False):
     return results, navs
 
 
+def _gbm_paths(returns, stress_mult: float = 2.5, days: int = 60,
+               n_paths: int = 300, drift_sign: float = -1.0,
+               seed: int = 2024) -> tuple:
+    """几何布朗运动合成路径矩阵，返回 (nav_matrix, sigma_s)。
+
+    用收益序列自身的历史波动率 sigma，叠加压力漂移（drift_sign 控制上行/下行）
+    与波动放大 stress_mult，生成 days×n_paths 条合成路径；数据不足(收益<20)时
+    返回 (None, None)。漂移保持极小（仅体现牛/熊方向），避免持续单边漂移导致
+    "必然清零"式极端回撤——真实极端行情的机制是"均值近似随机 + 高波动 + 尾部冲击"。
+    """
+    r = pd.to_numeric(returns, errors="coerce").dropna()
+    if len(r) < 20:
+        return None, None
+    sigma = float(r.std())
+    if sigma <= 0:
+        sigma = 0.01
+    sigma_s = sigma * stress_mult
+    mu_s = drift_sign * 0.05 * sigma_s
+    rng = np.random.default_rng(seed)
+    shocks = mu_s + sigma_s * rng.standard_normal((days, n_paths))
+    nav = np.cumprod(1 + shocks, axis=0)
+    return nav, sigma_s
+
+
 def _monte_carlo_pressure(returns, stress_mult: float = 2.5, days: int = 60,
                           n_paths: int = 300, drift_sign: float = -1.0,
                           seed: int = 2024) -> dict:
     """参数化蒙特卡洛压力模拟（几何布朗运动）。
 
-    用收益序列自身的历史波动率 sigma，叠加压力漂移（drift_sign 控制上行/下行）
-    与波动放大 stress_mult，生成 n_paths 条合成压力路径，返回每条路径最大回撤/
-    期末缩水的悲观分位（10% 分位）。用于历史切片无法覆盖的新基金兜底，
-    也作为独立的 what-if 压力情景。seed 由情景名生成，保证不同情景结果各异。
+    生成 n_paths 条合成压力路径，返回每条路径最大回撤/期末缩水的悲观分位（10% 分位）。
+    用于历史切片无法覆盖的新基金兜底，也作为独立的 what-if 压力情景。
+    seed 由情景名生成，保证不同情景结果各异。
     """
-    r = pd.to_numeric(returns, errors="coerce").dropna()
-    if len(r) < 20:
+    nav, sigma_s = _gbm_paths(returns, stress_mult, days, n_paths, drift_sign, seed)
+    if nav is None:
         return {}
-    sigma = float(r.std())
-    if sigma <= 0:
-        sigma = 0.01
-    sigma_s = sigma * stress_mult
-    # 漂移保持极小（仅体现牛/熊方向），避免持续单边漂移导致"必然清零"式极端回撤。
-    # 真实极端行情的机制是"均值近似随机 + 高波动 + 尾部冲击"，而非每天稳定下跌。
-    mu_s = drift_sign * 0.05 * sigma_s
-    rng = np.random.default_rng(seed)
-    shocks = mu_s + sigma_s * rng.standard_normal((days, n_paths))
-    nav = np.cumprod(1 + shocks, axis=0)
     mdd_paths = (nav / np.maximum.accumulate(nav, axis=0) - 1).min(axis=0)
     shrink_paths = nav[-1] - 1
     return {
@@ -216,17 +229,9 @@ def _monte_carlo_navs(returns, stress_mult: float = 2.5, days: int = 60,
                       n_paths: int = 50, drift_sign: float = -1.0,
                       seed: int = 2024) -> dict:
     """蒙特卡洛模拟生成多条完整 NAV 路径（用于回撤曲线叠加展示）。"""
-    r = pd.to_numeric(returns, errors="coerce").dropna()
-    if len(r) < 20:
+    nav, _ = _gbm_paths(returns, stress_mult, days, n_paths, drift_sign, seed)
+    if nav is None:
         return {}
-    sigma = float(r.std())
-    if sigma <= 0:
-        sigma = 0.01
-    sigma_s = sigma * stress_mult
-    mu_s = drift_sign * 0.05 * sigma_s
-    rng = np.random.default_rng(seed)
-    shocks = mu_s + sigma_s * rng.standard_normal((days, n_paths))
-    nav = np.cumprod(1 + shocks, axis=0)
     dd = nav / np.maximum.accumulate(nav, axis=0) - 1
     worst_idx = int(np.argmin(dd.min(axis=0)))
     median_idx = int(np.argsort(dd.min(axis=0))[round(n_paths * 0.5)])
@@ -234,24 +239,8 @@ def _monte_carlo_navs(returns, stress_mult: float = 2.5, days: int = 60,
             "中位路径": pd.Series(nav[:, median_idx], name="蒙特卡洛中位")}
 
 
-def stress_test_portfolio(prices_dict: dict, weights: dict) -> dict:
-    """对当前组合（权重）进行历史情景 + 蒙特卡洛压力测试。"""
-    full_ret = _full_returns(prices_dict)
-    port_full = _portfolio_returns(full_ret, weights)
-
-    def _history_fn(name, sc):
-        ret_df = _scenario_returns(prices_dict, sc["start"], sc["end"])
-        if ret_df.empty:
-            return None, None
-        port_ret = _portfolio_returns(ret_df, weights)
-        return _nav_from_ret(port_ret), None
-
-    results, _ = _iterate_scenarios(port_full, _history_fn, with_paths=False)
-    return results
-
-
-def stress_test_fund(prices: pd.Series) -> dict:
-    """单基金历史情景 + 蒙特卡洛压力测试。"""
+def _fund_stress(prices: pd.Series, with_paths: bool = False):
+    """单基金历史情景 + 蒙特卡洛压力测试（with_paths 控制是否返回走势路径）。"""
     s = pd.to_numeric(prices, errors="coerce").dropna()
     s.index = pd.to_datetime(s.index)
     full_ret = s.pct_change().dropna()
@@ -262,33 +251,14 @@ def stress_test_fund(prices: pd.Series) -> dict:
             return None, None
         return sub / sub.iloc[0], None
 
+    if with_paths:
+        return _iterate_scenarios(full_ret, _history_fn, with_paths=True)
     results, _ = _iterate_scenarios(full_ret, _history_fn, with_paths=False)
     return results
 
 
-def stress_test_fund_with_paths(prices: pd.Series) -> tuple:
-    """单基金压力测试，返回 (stats_dict, navs_dict)。
-
-    navs_dict: {情景名: pd.Series(归一化净值)}
-    """
-    s = pd.to_numeric(prices, errors="coerce").dropna()
-    s.index = pd.to_datetime(s.index)
-    full_ret = s.pct_change().dropna()
-
-    def _history_fn(name, sc):
-        sub = s[(s.index >= pd.Timestamp(sc["start"])) & (s.index <= pd.Timestamp(sc["end"]))]
-        if len(sub) < 20:
-            return None, None
-        return sub / sub.iloc[0], None
-
-    return _iterate_scenarios(full_ret, _history_fn, with_paths=True)
-
-
-def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
-    """组合压力测试，返回 (stats_dict, navs_dict)。
-
-    navs_dict: {情景名: pd.Series(归一化净值)}
-    """
+def _portfolio_stress(prices_dict: dict, weights: dict, with_paths: bool = False):
+    """组合历史情景 + 蒙特卡洛压力测试（with_paths 控制是否返回走势路径）。"""
     full_ret = _full_returns(prices_dict)
     port_full = _portfolio_returns(full_ret, weights)
 
@@ -299,7 +269,30 @@ def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
         port_ret = _portfolio_returns(ret_df, weights)
         return _nav_from_ret(port_ret), None
 
-    return _iterate_scenarios(port_full, _history_fn, with_paths=True)
+    if with_paths:
+        return _iterate_scenarios(port_full, _history_fn, with_paths=True)
+    results, _ = _iterate_scenarios(port_full, _history_fn, with_paths=False)
+    return results
+
+
+def stress_test_portfolio(prices_dict: dict, weights: dict) -> dict:
+    """对当前组合（权重）进行历史情景 + 蒙特卡洛压力测试。"""
+    return _portfolio_stress(prices_dict, weights, with_paths=False)
+
+
+def stress_test_fund(prices: pd.Series) -> dict:
+    """单基金历史情景 + 蒙特卡洛压力测试。"""
+    return _fund_stress(prices, with_paths=False)
+
+
+def stress_test_fund_with_paths(prices: pd.Series) -> tuple:
+    """单基金压力测试，返回 (stats_dict, navs_dict)。navs_dict: {情景名: 归一化净值序列}。"""
+    return _fund_stress(prices, with_paths=True)
+
+
+def stress_test_portfolio_with_paths(prices_dict: dict, weights: dict) -> tuple:
+    """组合压力测试，返回 (stats_dict, navs_dict)。navs_dict: {情景名: 归一化净值序列}。"""
+    return _portfolio_stress(prices_dict, weights, with_paths=True)
 
 
 def stress_summary(results: dict) -> str:

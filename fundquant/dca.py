@@ -37,24 +37,6 @@ def _xirr(amounts: list, dates: list) -> float:
         return np.nan
 
 
-def _valuation_pct(prices: pd.Series, pe_hist: pd.DataFrame = None) -> pd.Series:
-    """估值分位序列（对齐价格索引，0-1）：基于真实 PE-TTM 分位（扩张窗口、无前视）。
-
-    无真实 PE 数据时返回空序列（不再用价格分位冒充估值）。
-    """
-    if pe_hist is None or getattr(pe_hist, "empty", True):
-        return pd.Series(dtype=float)
-    pct = ind.pe_percentile_series(pe_hist)
-    if pct is None or pct.empty:
-        return pd.Series(dtype=float)
-    # 前向填充对齐到价格交易日
-    idx = pd.to_datetime(pd.Series(prices.index))
-    left = pd.DataFrame({"date": idx}).sort_values("date").reset_index(drop=True)
-    right = pct.rename("vp").reset_index().rename(columns={"index": "date"}).sort_values("date")
-    merged = pd.merge_asof(left, right, on="date", direction="backward")
-    return pd.Series(merged["vp"].values, index=pd.to_datetime(merged["date"]))
-
-
 def dca_backtest(prices: pd.Series, start: str = None, end: str = None,
                  freq: str = "月", amount: float = 1000.0,
                  mode: str = "固定", initial_amount: float = 0.0,
@@ -84,7 +66,7 @@ def dca_backtest(prices: pd.Series, start: str = None, end: str = None,
     if not invest_dates:
         return {}
 
-    val_pct = _valuation_pct(s, pe_hist)
+    val_pct = ind.pe_percentile_aligned(s, pe_hist)
     shares = 0.0
     cost = 0.0
     cashflows = []
@@ -177,7 +159,7 @@ def dca_stop_profit_backtest(prices: pd.Series, start: str = None, end: str = No
     groups = s.groupby(pd.Grouper(freq=FREQ_MAP.get(freq, "ME")))
     invest_dates = [g.index[0] for _, g in groups if len(g) > 0]
     invest_dates = [d for d in invest_dates if d in s.index]
-    val_pct = _valuation_pct(s, pe_hist)
+    val_pct = ind.pe_percentile_aligned(s, pe_hist)
 
     def simulate(strategy: str, target: float):
         shares = 0.0
@@ -226,7 +208,7 @@ def dca_stop_profit_backtest(prices: pd.Series, start: str = None, end: str = No
 def dca_timing_advice(prices: pd.Series, pe_hist: pd.DataFrame = None) -> dict:
     """定投时点优选建议：基于真实估值分位 + 波动因子。无真实 PE 数据时提示数据不足。"""
     s = pd.to_numeric(prices, errors="coerce").dropna()
-    vp_series = _valuation_pct(s, pe_hist)
+    vp_series = ind.pe_percentile_aligned(s, pe_hist)
     vol = ind.annualized_volatility(s)
     if vp_series.empty or pd.isna(vp_series.iloc[-1]):
         return {"估值分位": None, "波动率": round(vol * 100, 1),
