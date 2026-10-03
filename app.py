@@ -5,7 +5,6 @@
 模块化驾驶舱：顶部导航 + 侧边菜单（含场内/场外全局筛选）+ 卡片主区，全功能页面。
 """
 import datetime as _dt
-import html as _html
 
 import pandas as pd
 import streamlit as st
@@ -243,19 +242,10 @@ def render_metrics_row(metrics, keys_labels, per_row=4):
 
 
 def full_table(df: pd.DataFrame):
-    """完整表格：长文本自动换行，直接显示全部内容（不截断）。"""
-    cols = list(df.columns)
-    head = "".join(f"<th>{_html.escape(str(c))}</th>" for c in cols)
-    body = []
-    for _, r in df.iterrows():
-        body.append("<tr>" + "".join(
-            f"<td>{_html.escape('' if v is None else str(v).replace(chr(10), '<br>'))}</td>"
-            for v in r) + "</tr>")
-    st.markdown(
-        f"<div style='overflow-x:auto;'>"
-        f"<table class='dtable'><thead><tr>{head}</tr></thead>"
-        f"<tbody>{''.join(body)}</tbody></table></div>",
-        unsafe_allow_html=True)
+    """完整表格：直接渲染全部内容（不截断），长文本自动换行。"""
+    html = df.to_html(index=False, na_rep="", border=0, escape=True)
+    html = html.replace('class="dataframe"', 'class="dtable"', 1)
+    st.markdown(f"<div style='overflow-x:auto;'>{html}</div>", unsafe_allow_html=True)
 
 
 def _fund_labels(u: pd.DataFrame):
