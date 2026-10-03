@@ -235,13 +235,23 @@ def _fund_labels(u: pd.DataFrame):
     return u
 
 
-NAV_GROUPS = {
-    "总览": [("数据驾驶舱", "📊")],
-    "基金分析": [("基金画像", "🔍"), ("基金筛选", "⚖️"), ("基金对比", "🔄")],
-    "组合与定投": [("组合构建", "🧩"), ("大类资产配置", "🌐"), ("定投测算", "💰")],
-    "策略与风险": [("策略回测对比", "📈"), ("压力测试", "🛡️")],
-    "报告": [("一键量化报告", "📄")],
-}
+NAV_TREE = [
+    ("", [("数据驾驶舱", "📊")]),
+    ("单基金分析", [
+        ("基金画像", "🔍"),
+        ("基金筛选", "⚖️"),
+        ("定投测算", "💰"),
+        ("策略回测对比", "📈"),
+        ("压力测试（单基金）", "🛡️"),
+        ("一键量化报告", "📄"),
+    ]),
+    ("多基金分析", [
+        ("基金对比", "🔄"),
+        ("组合构建", "🧩"),
+        ("大类资产配置", "🌐"),
+        ("压力测试（组合）", "🛡️"),
+    ]),
+]
 
 
 def sidebar():
@@ -252,13 +262,17 @@ def sidebar():
     dark = _d2.checkbox("深色模式", value=st.session_state.dark_mode,
                          key="dark_toggle", label_visibility="collapsed")
     st.session_state.dark_mode = dark
-    group = st.sidebar.selectbox("功能分组", list(NAV_GROUPS))
-    items = NAV_GROUPS[group]
-    names = [n for n, _ in items]
-    labels = [f"{e} {n}" for n, e in items]
-    page = st.sidebar.radio("功能导航", names,
-                            format_func=dict(zip(names, labels)).get,
-                            key=f"nav_{group}")
+    st.session_state.setdefault("page", "数据驾驶舱")
+    for section, items in NAV_TREE:
+        if section:
+            st.sidebar.markdown(f"**{section}**")
+        for name, emoji in items:
+            active = st.session_state["page"] == name
+            if st.sidebar.button(f"{emoji} {name}", key=f"nav_{name}",
+                                 use_container_width=True,
+                                 type="primary" if active else "secondary"):
+                st.session_state["page"] = name
+                st.rerun()
 
     st.sidebar.markdown("---")
     st.session_state.style = st.sidebar.selectbox(
@@ -336,7 +350,7 @@ def sidebar():
         "<div style='font-size:11px; line-height:1.5; color:#cbd5e1'>仅供研究参考，不构成投资建议</div>"
         f"<div style='font-size:10px; line-height:1.5; color:#9fb3cd; margin-top:4px;'>{RISK}</div>",
         unsafe_allow_html=True)
-    return page
+    return st.session_state["page"]
 
 
 def cur_fund():
@@ -1310,11 +1324,14 @@ def page_backtest():
 
 
 # ==================== 页面 10：压力测试 ====================
-def page_stress():
+def page_stress(preset_mode=None):
     st.header("极端行情压力测试")
     st.caption("历史情景回放 + 蒙特卡洛模拟，评估单基金或组合在极端条件下的尾部风险")
     code, name, fkey = cur_fund()
-    mode = st.radio("测试对象", ["单基金", "组合"], horizontal=True)
+    if preset_mode:
+        mode = preset_mode
+    else:
+        mode = st.radio("测试对象", ["单基金", "组合"], horizontal=True)
     if mode == "单基金":
         hist = c_fund_hist(code, fkey, "20150101", default_end())
         if hist is None or hist.empty:
@@ -1458,13 +1475,14 @@ PAGES = {
     "数据驾驶舱": page_dashboard,
     "基金画像": page_profile,
     "基金筛选": page_screener,
+    "定投测算": page_dca,
+    "策略回测对比": page_backtest,
+    "压力测试（单基金）": lambda: page_stress("单基金"),
+    "一键量化报告": page_report,
     "基金对比": page_compare,
     "组合构建": page_portfolio,
     "大类资产配置": page_allocation,
-    "定投测算": page_dca,
-    "策略回测对比": page_backtest,
-    "压力测试": page_stress,
-    "一键量化报告": page_report,
+    "压力测试（组合）": lambda: page_stress("组合"),
 }
 
 
