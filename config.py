@@ -171,6 +171,7 @@ COLORS = {
     "down_bg": "#E8F5EC",    # 下跌语义浅绿背景（仪表盘等）
     "series": ["#1E3A5F", "#18A058", "#E5484D", "#2B6CB0", "#D9822B", "#7C5CC4"],
     "grid": "#e9edf2",       # 网格线色
+    "ref_line": "#cbd5e1",   # 参考线色（y=0、对角线等，比网格稍明显）
     "card_bg": "#ffffff",    # 卡片背景
     "card_border": "#e9edf2",# 卡片边框
     "text": "#1e293b",       # 正文
@@ -189,6 +190,7 @@ DARK_COLORS = {
     "down_bg": "#1A3B2A",    # 下跌语义深绿背景
     "series": ["#8BB8E8", "#68D391", "#FC8181", "#63B3ED", "#F6AD55", "#B794F4"],
     "grid": "#1E293B",       # 深色网格线
+    "ref_line": "#475569",   # 深色参考线（比网格稍亮，深底上清晰）
     "card_bg": "#1E293B",    # 深色卡片背景
     "card_border": "#334155",# 深色卡片边框
     "text": "#F1F5F9",       # 深色正文（调亮）

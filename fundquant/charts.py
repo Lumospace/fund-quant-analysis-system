@@ -77,7 +77,7 @@ def drawdown_chart(prices_or_nav: pd.Series, title="回撤走势"):
     dd = (s / s.cummax() - 1) * 100
     fig = go.Figure(go.Scatter(x=dd.index, y=dd.values, fill="tozeroy",
                                line=dict(color=C["down"], width=1.5), name="回撤"))
-    fig.add_hline(y=0, line_color="#cbd5e1", line_width=1)
+    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
     fig.update_yaxes(title="回撤 (%)")
     return _base(fig, title, showlegend=False)
 
@@ -181,7 +181,7 @@ def stress_drawdown_overlay(navs: dict, title="各情景回撤路径叠加"):
             x=list(range(len(dd))), y=dd.values, mode="lines", name=name,
             line=dict(color=color, width=1.6),
             hovertemplate="交易日 %{x}<br>回撤 %{y:.2f}%<extra>" + name + "</extra>"))
-    fig.add_hline(y=0, line_color="#cbd5e1", line_width=1, line_dash="dash")
+    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1, line_dash="dash")
     fig.update_xaxes(title="情景内交易日")
     fig.update_yaxes(title="回撤 (%)")
     fig.update_layout(hovermode="x unified")
@@ -217,7 +217,7 @@ def drawdown_compare(navs: dict, title="各策略回撤对比"):
         dd = (nav / nav.cummax() - 1) * 100
         fig.add_trace(go.Scatter(x=dd.index, y=dd.values, mode="lines", name=name,
                                  line=dict(color=C["series"][i % len(C["series"])], width=1.6)))
-    fig.add_hline(y=0, line_color="#cbd5e1", line_width=1)
+    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
     fig.update_yaxes(title="回撤 (%)")
     return _base(fig, title, height=400)
 
@@ -295,7 +295,7 @@ def risk_return_scatter(points: pd.DataFrame, title="收益-风险散点"):
                                  hovertemplate="波动 %{x:.1f}% · 收益 %{y:.1f}%<extra>当前</extra>"))
     fig.update_xaxes(title="年化波动率 (%)")
     fig.update_yaxes(title="年化收益 (%)")
-    fig.add_hline(y=0, line_color="#cbd5e1", line_width=1)
+    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
     return _base(fig, title, height=380, showlegend=True)
 
 
@@ -306,7 +306,7 @@ def factor_ic_chart(frame: pd.DataFrame, title="", cumulative=False):
         s = frame[col]
         fig.add_trace(go.Scatter(x=s.index, y=s.values, mode="lines", name=col,
                                  line=dict(color=C["series"][i % len(C["series"])], width=1.6)))
-    fig.add_hline(y=0, line_color="#cbd5e1", line_width=1)
+    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
     fig.update_yaxes(title="累计 IC" if cumulative else "IC")
     return _base(fig, title=title, height=400)
 
@@ -324,7 +324,7 @@ def reliability_diagram(calib_data: dict, title="概率校准曲线 (Reliability
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
-                             line=dict(color="#cbd5e1", width=1.5, dash="dash"),
+                             line=dict(color=C["ref_line"], width=1.5, dash="dash"),
                              name="完美校准 (对角线)", showlegend=True))
     fig.add_trace(go.Scatter(x=pred_means, y=actual_freqs,
                              mode="markers+text",
@@ -337,7 +337,7 @@ def reliability_diagram(calib_data: dict, title="概率校准曲线 (Reliability
     fig.update_xaxes(title="预测概率", range=[-0.05, 1.05], dtick=0.1)
     fig.update_yaxes(title="实际发生频率", range=[-0.05, 1.05], dtick=0.1)
     fig.add_annotation(x=0.95, y=0.05, text="高估", showarrow=False,
-                       font=dict(size=12, color="#94a3b8"))
+                       font=dict(size=12, color=C["text_secondary"]))
     fig.add_annotation(x=0.05, y=0.95, text="低估", showarrow=False,
-                       font=dict(size=12, color="#94a3b8"))
+                       font=dict(size=12, color=C["text_secondary"]))
     return _base(fig, title, height=400, showlegend=True)
