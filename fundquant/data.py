@@ -334,6 +334,26 @@ def fund_code_to_name(code: str) -> str:
     return code
 
 
+def get_fund_profile(code: str) -> pd.DataFrame:
+    """基金档案（场外基金）：成立时间/最新规模/基金公司/基金经理等基本信息。
+
+    来自雪球基金基础信息接口，仅支持场外基金（6 位代码）；ETF 或接口失败返回空。
+    返回「项目/内容」两列 DataFrame（精简核心字段，剔除过长的投资策略/目标）。
+    """
+    import akshare as ak
+    df = _call_ak(ak.fund_individual_basic_info_xq, f"fund_profile_{code}",
+                  ttl=24 * 3600, symbol=str(code))
+    if df is None or df.empty or "item" not in df.columns or "value" not in df.columns:
+        return pd.DataFrame(columns=["项目", "内容"])
+    keep_items = ["基金代码", "基金名称", "基金全称", "成立时间", "最新规模",
+                  "基金公司", "基金经理", "托管银行", "基金类型", "业绩比较基准"]
+    out = df[df["item"].isin(keep_items)].copy()
+    out["value"] = out["value"].astype(str).replace({"<NA>": "", "nan": "", "None": ""})
+    out = out[out["value"].str.strip() != ""]
+    out.columns = ["项目", "内容"]
+    return out.reset_index(drop=True)
+
+
 # ==================== 行业/板块 与 重仓股 ====================
 
 def classify_sector(name) -> str:

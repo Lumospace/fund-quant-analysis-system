@@ -575,6 +575,12 @@ def page_profile():
     tabs = st.tabs(tab_names)
 
     with tabs[0]:  # 概览
+        if fkey == "otc":
+            profile = data.get_fund_profile(code)
+            if profile is not None and not profile.empty:
+                with st.expander(f"基金档案（{name}）", expanded=False):
+                    full_table(profile)
+
         st.markdown(f"#### {name}（{code}）核心指标")
         render_metrics_row(metrics, [
             ("年化收益", "年化收益%"), ("最大回撤", "最大回撤%"),
