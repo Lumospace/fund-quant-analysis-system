@@ -803,7 +803,9 @@ def page_compare():
                                      min_value=start_date, max_value=_dt.date.today())
         submitted = st.form_submit_button("开始对比", type="primary", use_container_width=True)
 
-    if not submitted:
+    if submitted:
+        st.session_state["cmp_done"] = True
+    if not st.session_state.get("cmp_done", False):
         st.info("选择对比基金并设置日期后，点击「开始对比」。")
         return
 
@@ -933,7 +935,9 @@ def page_portfolio():
 
         submitted = st.form_submit_button("开始优化", type="primary", use_container_width=True)
 
-    if not submitted:
+    if submitted:
+        st.session_state["pf_done"] = True
+    if not st.session_state.get("pf_done", False):
         st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
         return
 
@@ -1054,7 +1058,9 @@ def page_allocation():
 
         submitted = st.form_submit_button("开始配置", type="primary", use_container_width=True)
 
-    if not submitted:
+    if submitted:
+        st.session_state["alloc_done"] = True
+    if not st.session_state.get("alloc_done", False):
         st.info("设置好日期、配置方法与目标波动率后，点击「开始配置」。")
         return
 
@@ -1153,7 +1159,9 @@ def page_dca():
                                      min_value=start_date, max_value=_dt.date.today())
         submitted = st.form_submit_button("开始测算", type="primary", use_container_width=True)
 
-    if not submitted:
+    if submitted:
+        st.session_state["dca_done"] = True
+    if not st.session_state.get("dca_done", False):
         st.info("设置好定投参数后，点击「开始测算」。")
         return
 
@@ -1240,7 +1248,9 @@ def page_backtest():
             dca_amount = st.number_input("定投每期金额(元)", 100, 100000, 1000, 100)
         submitted = st.form_submit_button("开始回测", type="primary", use_container_width=True)
 
-    if not submitted:
+    if submitted:
+        st.session_state["bt_done"] = True
+    if not st.session_state.get("bt_done", False):
         st.info("设置好回测参数后，点击「开始回测」。")
         return
 
