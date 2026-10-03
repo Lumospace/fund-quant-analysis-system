@@ -94,6 +94,11 @@ def inject_css():
     [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
     [data-testid="stExpander"] summary span {{color: {C['text']} !important;}}
     .stApp [data-baseweb="tab"] {{color: {C['text']} !important;}}
+    /* 提示框（info/warning/error/success）：深底亮文，语义由图标与边框保留 */
+    .stApp [data-testid="stAlert"] {{
+        background-color: {C['card_bg']} !important;
+        border: 1px solid {C['card_border']} !important;
+    }}
     /* 侧栏导航按钮：深色半透明底 + 亮字；当前项主题色高亮 */
     [data-testid="stSidebar"] [data-testid="stButton"] > button {{
         color: {C['text']} !important;
