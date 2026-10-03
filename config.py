@@ -182,7 +182,7 @@ DARK_COLORS = {
     "bg": "#0F172A",         # 深海军蓝
     "up": "#FC8181",         # 上涨红（深色版柔和红）
     "down": "#68D391",       # 下跌绿（深色版柔和绿）
-    "neutral": "#94A3B8",
+    "neutral": "#B7C3D8",
     "accent": "#63B3ED",
     "warn": "#F6AD55",       # 警示琥珀
     "up_bg": "#3B1A1A",      # 上涨语义深红背景
@@ -191,8 +191,8 @@ DARK_COLORS = {
     "grid": "#1E293B",       # 深色网格线
     "card_bg": "#1E293B",    # 深色卡片背景
     "card_border": "#334155",# 深色卡片边框
-    "text": "#E2E8F0",       # 深色正文
-    "text_secondary": "#94A3B8",
+    "text": "#F1F5F9",       # 深色正文（调亮）
+    "text_secondary": "#B7C3D8",
 }
 
 

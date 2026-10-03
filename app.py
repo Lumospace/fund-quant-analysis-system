@@ -32,6 +32,11 @@ def _cur_colors():
 # ==================== 样式 ====================
 def inject_css():
     C = _cur_colors()
+    _dark = st.session_state.dark_mode
+    _sb_bg = C["card_bg"] if _dark else "#ffffff"
+    _sb_bd = C["card_border"] if _dark else "#dbe4ee"
+    _sb_tx = C["text"] if _dark else "#1e293b"
+    _sb_ac = C["accent"] if _dark else "#2B6CB0"
     st.markdown(f"""
     <style>
     .main .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
@@ -41,8 +46,8 @@ def inject_css():
                      "Helvetica Neue", Arial, sans-serif;}}
     /* 侧边栏：渐变背景 + 精准着色 */
     [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, #1E3A5F 0%, #2B6CB0 100%);
-        {"filter: brightness(0.75);" if st.session_state.dark_mode else ""}
+        background: {"linear-gradient(180deg, #111C32 0%, #1E293B 100%)" if st.session_state.dark_mode
+                     else "linear-gradient(180deg, #1E3A5F 0%, #2B6CB0 100%)"};
     }}
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3
         {{color: #ffffff !important;}}
@@ -50,10 +55,10 @@ def inject_css():
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] label p {{color: #dfe7f3 !important;}}
     [data-testid="stSidebar"] [role="radiogroup"] label p {{color: #ffffff !important;}}
     [data-testid="stSidebar"] [data-baseweb="select"] > div
-        {{background:#ffffff; border-radius:8px; border:1px solid #dbe4ee;}}
-    [data-testid="stSidebar"] [data-baseweb="select"] * {{color:#1e293b !important;}}
+        {{background:{_sb_bg}; border-radius:8px; border:1px solid {_sb_bd};}}
+    [data-testid="stSidebar"] [data-baseweb="select"] * {{color:{_sb_tx} !important;}}
     [data-testid="stSidebar"] [data-baseweb="select"] div[aria-selected="true"] i
-        {{color:#2B6CB0 !important;}}
+        {{color:{_sb_ac} !important;}}
     /* 指标卡片 */
     .metric-card {{background:{C['card_bg']}; border-radius:10px; padding:12px 14px;
         box-shadow:0 1px 4px rgba(30,58,95,.08); border:1px solid {C['card_border']};}}
@@ -74,7 +79,8 @@ def inject_css():
     {f"""
     /* === 深色模式：正文与原生组件色彩适配（保留涨跌红绿等语义色） === */
     [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
-    [data-testid="stCaptionContainer"] p {{color: {C['text']} !important;}}
+    [data-testid="stMarkdownContainer"] strong, [data-testid="stMarkdownContainer"] em,
+    [data-testid="stCaptionContainer"] p, .stCaptionContainer p {{color: {C['text']} !important;}}
     .stApp label, .stApp .stSelectbox label, .stApp .stRadio label {{color: {C['text']} !important;}}
     .stApp .st-bb, .stApp .st-at, .stApp .st-aw {{color: {C['text']} !important;}}
     .stApp .st-emotion-cache-1vt4y43, .stApp .st-emotion-cache-15hul6a {{color: {C['text']} !important;}}
@@ -84,6 +90,20 @@ def inject_css():
     .stApp input, .stApp textarea, .stApp [data-baseweb="input"] input {{color: {C['text']} !important; background: {C['card_bg']} !important;}}
     .stApp [data-baseweb="select"] > div {{background: {C['card_bg']} !important; border-color: {C['card_border']} !important;}}
     .stApp [data-baseweb="select"] * {{color: {C['text']} !important;}}
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
+    [data-testid="stExpander"] summary span {{color: {C['text']} !important;}}
+    .stApp [data-baseweb="tab"] {{color: {C['text']} !important;}}
+    /* 侧栏导航按钮：深色半透明底 + 亮字；当前项主题色高亮 */
+    [data-testid="stSidebar"] [data-testid="stButton"] > button {{
+        color: {C['text']} !important;
+        background: rgba(255,255,255,0.07) !important;
+        border: 1px solid rgba(255,255,255,0.18) !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stButton"] > button[kind="primary"] {{
+        background: {C['primary']} !important;
+        color: #0F172A !important;
+        border: none !important;
+    }}
     """ if st.session_state.dark_mode else ""}
     </style>""", unsafe_allow_html=True)
 
