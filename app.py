@@ -78,6 +78,8 @@ def inject_css():
     .dtable tr:nth-child(even) td {{background:{C['bg']};}}
     {f"""
     /* === 深色模式：正文与原生组件色彩适配（保留涨跌红绿等语义色） === */
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{
+        color: {C['primary']} !important;}}
     [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
     [data-testid="stMarkdownContainer"] strong, [data-testid="stMarkdownContainer"] em,
     [data-testid="stCaptionContainer"] p, .stCaptionContainer p {{color: {C['text']} !important;}}
