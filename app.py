@@ -997,14 +997,14 @@ def page_portfolio():
                                 on_change=_invalidate_pf)
     if use_per_asset:
         with st.expander("逐资产权重边界", expanded=True):
-            st.caption("每只基金可单独设置更紧的上限，默认等于上方全局上限；上界加号到全局上限即停。")
+            st.caption("每只基金的最小/最大均不超过上方全局上限；最大默认等于全局上限，可逐只下调收紧。")
             per_bounds = []
             _hi = round(max_w, 4)
             for i, lbl in enumerate(picks):
                 b1, b2 = st.columns(2)
                 with b1:
-                    lo = st.number_input(f"{lbl} 最小", 0.0, 1.0, 0.0, 0.05,
-                                         key=f"pf_lo_{i}", format="%.2f",
+                    lo = st.number_input(f"{lbl} 最小", 0.0, _hi, 0.0, 0.05,
+                                         key=f"pf_lo_{i}_{_hi}", format="%.2f",
                                          on_change=_invalidate_pf)
                 with b2:
                     hi = st.number_input(f"{lbl} 最大", 0.0, _hi, _hi, 0.05,

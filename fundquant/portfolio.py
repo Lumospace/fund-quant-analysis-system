@@ -225,6 +225,17 @@ def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
         bounds = [(0.0, upper)] * n
     else:
         bounds = [tuple(b) for b in bounds]
+        lo_sum = sum(max(0.0, b[0]) for b in bounds)
+        hi_sum = sum(max(0.0, b[1]) for b in bounds)
+        if lo_sum > 1 + 1e-9 or hi_sum < 1 - 1e-6:
+            upper = 1.0 / n
+            if lo_sum > 1 + 1e-9:
+                notes.append(f"逐资产下界合计 {lo_sum*100:.0f}% 超过 100%，无可行解，"
+                             f"已回退等权上限 {upper*100:.0f}%")
+            else:
+                notes.append(f"逐资产上界合计 {hi_sum*100:.0f}% 不足 100%，无可行解，"
+                             f"已回退等权上限 {upper*100:.0f}%")
+            bounds = [(0.0, upper)] * n
 
     ineq_cons = []
     if sector_limit is not None and sector_limit < 1.0 - 1e-9:
