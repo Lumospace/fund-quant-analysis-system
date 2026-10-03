@@ -98,7 +98,9 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, allow_stale=Tru
                 _save_cache(key, df)
                 return df
             last = df
-        except (OSError, ValueError, KeyError, TypeError) as e:
+        except Exception as e:
+            # akshare 接口失败形态多样（网络错误、反爬返回 HTML、JS 解析异常等），
+            # 统一捕获降级，避免单个接口异常导致整个页面崩溃。
             last = e
             time.sleep(0.6 * (i + 1))
     if not allow_stale:
