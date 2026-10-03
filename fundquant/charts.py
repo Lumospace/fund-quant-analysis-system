@@ -224,8 +224,8 @@ def probability_gauge(prob_up: float, title="上涨概率"):
         mode="gauge+number", value=prob_up * 100,
         number=dict(suffix="%", font=dict(size=36, color=C["primary"])),
         gauge=dict(axis=dict(range=[0, 100]), bar=dict(color=C["accent"]),
-                   steps=[dict(range=[0, 50], color="#fdecea"),
-                          dict(range=[50, 100], color="#e6f4ea")],
+                   steps=[dict(range=[0, 50], color=C["down_bg"]),
+                          dict(range=[50, 100], color=C["up_bg"])],
                    threshold=dict(line=dict(color=C["down"], width=3), thickness=0.75, value=50)),
         title=dict(text=title)))
     fig.update_layout(height=260, margin=dict(l=40, r=40, t=60, b=20))
@@ -239,8 +239,8 @@ def corr_heatmap(corr: pd.DataFrame, title="成分相关性矩阵"):
     text = [[f"{v:.2f}" for v in row] for row in z]
     fig = go.Figure(go.Heatmap(
         z=z, x=labels, y=labels, zmin=-1, zmax=1,
-        colorscale=[[0.0, C["accent"]], [0.5, "#ffffff"], [1.0, C["down"]]],
-        text=text, texttemplate="%{text}", textfont=dict(size=11, color="#1f2937"),
+        colorscale=[[0.0, C["accent"]], [0.5, C["card_bg"]], [1.0, C["up"]]],
+        text=text, texttemplate="%{text}", textfont=dict(size=11, color=C["text"]),
         colorbar=dict(title="相关系数", thickness=14),
         hovertemplate="%{y} × %{x}: %{z:.2f}<extra></extra>"))
     fig.update_yaxes(autorange="reversed")
@@ -286,7 +286,7 @@ def risk_return_scatter(points: pd.DataFrame, title="收益-风险散点"):
                                  hovertemplate="波动 %{x:.1f}% · 收益 %{y:.1f}%<extra></extra>"))
         fig.add_trace(go.Scatter(x=[x[-1]], y=[y[-1]], mode="markers+text", name="当前",
                                  text=["当前"], textposition="top center",
-                                 marker=dict(color=C["down"], size=13,
+                                 marker=dict(color=C["accent"], size=13,
                                              line=dict(width=2, color="#ffffff")),
                                  hovertemplate="波动 %{x:.1f}% · 收益 %{y:.1f}%<extra>当前</extra>"))
     fig.update_xaxes(title="年化波动率 (%)")

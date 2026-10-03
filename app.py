@@ -363,6 +363,7 @@ def _search_narrow(s, key, max_rows=500):
 
 # ==================== 页面 1：数据驾驶舱 ====================
 def page_dashboard():
+    C = _cur_colors()
     hcol, bcol = st.columns([4, 1])
     with hcol:
         st.header("数据驾驶舱")
@@ -407,14 +408,14 @@ def page_dashboard():
         with c1:
             metric_card("场内ETF总数", t["total"])
         with c2:
-            metric_card("上涨", t["up"], config.COLORS["up"])
+            metric_card("上涨", t["up"], C["up"])
         with c3:
-            metric_card("下跌", t["down"], config.COLORS["down"])
+            metric_card("下跌", t["down"], C["down"])
         with c4:
             _avg = t["avg"]
             metric_card("平均涨跌", f"{_avg:+.2f}%" if pd.notna(_avg) else "--",
-                        config.COLORS["up"] if (pd.notna(_avg) and _avg >= 0)
-                        else (config.COLORS["down"] if pd.notna(_avg) else config.COLORS["neutral"]))
+                        C["up"] if (pd.notna(_avg) and _avg >= 0)
+                        else (C["down"] if pd.notna(_avg) else C["neutral"]))
 
     # —— 场外基金：全量总数 + 可估算子集 ——
     st.markdown("#### 场外基金 实时估值")
@@ -432,14 +433,14 @@ def page_dashboard():
         with c1:
             metric_card("场外基金总数", int(len(otc_all)))
         with c2:
-            metric_card("估算上涨" if is_est else "上涨", to["up"], config.COLORS["up"])
+            metric_card("估算上涨" if is_est else "上涨", to["up"], C["up"])
         with c3:
-            metric_card("估算下跌" if is_est else "下跌", to["down"], config.COLORS["down"])
+            metric_card("估算下跌" if is_est else "下跌", to["down"], C["down"])
         with c4:
             _oavg = to["avg"]
             metric_card("平均涨跌", f"{_oavg:+.2f}%" if pd.notna(_oavg) else "--",
-                        config.COLORS["up"] if (pd.notna(_oavg) and _oavg >= 0)
-                        else (config.COLORS["down"] if pd.notna(_oavg) else config.COLORS["neutral"]))
+                        C["up"] if (pd.notna(_oavg) and _oavg >= 0)
+                        else (C["down"] if pd.notna(_oavg) else C["neutral"]))
         if is_est:
             st.caption(f"可估算基金数 {to['total']} 只（基于重仓股估算，非当日实时净值）。")
 
@@ -536,9 +537,9 @@ def page_profile():
         rv = ind.rolling_volatility(prices, win)
         pts = ind.rolling_risk_return_points(prices, win, step=max(5, win // 3))
         st.plotly_chart(charts.rolling_line(rr, f"滚动{win}日收益(%)",
-                                            config.COLORS["primary"]), width="stretch")
+                                            _cur_colors()["primary"]), width="stretch")
         st.plotly_chart(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
-                                            config.COLORS["accent"], fill=True), width="stretch")
+                                            _cur_colors()["accent"], fill=True), width="stretch")
         st.plotly_chart(charts.risk_return_scatter(pts), width="stretch")
         st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
                    "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
