@@ -947,14 +947,6 @@ def _invalidate_pf():
     st.session_state.pop("pf_walk_summary", None)
 
 
-def _on_max_w_change():
-    """单资产权重上限变化：作废旧结果，并重置逐资产「最大」默认值跟随全局上限。"""
-    _invalidate_pf()
-    for k in list(st.session_state):
-        if k.startswith("pf_hi_"):
-            st.session_state.pop(k, None)
-
-
 def page_portfolio():
     st.header("投资组合量化优化")
     st.caption("马科维茨均值-方差 / 风险预算 / 目标收益等多种优化方法")
@@ -995,17 +987,19 @@ def page_portfolio():
     if mode == "目标收益":
         target_ret = st.slider("目标年化收益", 0.0, 0.3, 0.1, 0.01, on_change=_invalidate_pf)
 
-    # 全局单资产权重上限（拉动时同步重置逐资产「最大」默认值）
+    # 全局单资产权重上限（逐资产上界以此为硬上限，拉动后逐资产上限同步重置）
     max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05,
-                      on_change=_on_max_w_change)
+                      on_change=_invalidate_pf)
 
-    # 逐资产权重边界：勾选后紧跟输入区，覆盖全局上限
+    # 逐资产权重边界：勾选后紧跟输入区，上界不超全局上限（逐只收紧）
     bounds = None
-    use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False,
+    use_per_asset = st.checkbox("启用逐资产权重边界（逐只收紧，不超全局上限）", value=False,
                                 on_change=_invalidate_pf)
     if use_per_asset:
         with st.expander("逐资产权重边界", expanded=True):
+            st.caption("每只基金可单独设置更紧的上限，默认等于上方全局上限；上界加号到全局上限即停。")
             per_bounds = []
+            _hi = round(max_w, 4)
             for i, lbl in enumerate(picks):
                 b1, b2 = st.columns(2)
                 with b1:
@@ -1013,8 +1007,8 @@ def page_portfolio():
                                          key=f"pf_lo_{i}", format="%.2f",
                                          on_change=_invalidate_pf)
                 with b2:
-                    hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, max_w, 0.05,
-                                         key=f"pf_hi_{i}", format="%.2f",
+                    hi = st.number_input(f"{lbl} 最大", 0.0, _hi, _hi, 0.05,
+                                         key=f"pf_hi_{i}_{_hi}", format="%.2f",
                                          on_change=_invalidate_pf)
                 per_bounds.append((lo, hi))
             bounds = per_bounds
