@@ -119,14 +119,13 @@ def composite_score(m: dict, style: str = "稳健") -> dict:
     weights = dict(config.SCORE_WEIGHTS)
     pen = config.STYLE_PROFILES.get(style, config.STYLE_PROFILES["稳健"])["score_penalty_risk"]
 
-    # 风格修正：对风险维度做加权调整，其它维按比例归一
-    risk_base = weights["风险"]
-    # 惩罚系数作用于风险得分：pen>1 时风险得分被压低
+    # 风格修正：将风险得分与满分 100 的距离按 pen 缩放（adjusted = 100 - pen×(100-s)）。
+    # pen>1（保守）把风险得分拉低以惩罚风险，pen<1（进取）把风险得分抬高以放宽风险，
+    # pen=1（稳健）不变。各维度权重本就归一（和为 1），无需再按比例归一。
     adjusted = {}
     for k, (s, r) in dims.items():
         if k == "风险":
-            penalty = (100 - s) * (pen - 1.0)
-            adjusted[k] = _clamp(s - penalty)
+            adjusted[k] = _clamp(100 - pen * (100 - s))
         else:
             adjusted[k] = s
 
