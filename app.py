@@ -947,6 +947,14 @@ def _invalidate_pf():
     st.session_state.pop("pf_walk_summary", None)
 
 
+def _on_max_w_change():
+    """单资产权重上限变化：作废旧结果，并重置逐资产「最大」默认值跟随全局上限。"""
+    _invalidate_pf()
+    for k in list(st.session_state):
+        if k.startswith("pf_hi_"):
+            st.session_state.pop(k, None)
+
+
 def page_portfolio():
     st.header("投资组合量化优化")
     st.caption("马科维茨均值-方差 / 风险预算 / 目标收益等多种优化方法")
@@ -959,60 +967,68 @@ def page_portfolio():
     if fkey == "otc":
         s = _search_narrow(s, "pf_search", max_rows=300)
 
-    # 选择成分基金（多选，选好后随下方表单一并提交）
+    # 选择成分基金（多选）
     options = s["label"].tolist()
     default = options[:3] if len(options) >= 3 else options
     picks = st.multiselect("选择成分基金（2~10 只，可搜索）", options, default=default,
                            max_selections=10, key="pf_picks", on_change=_invalidate_pf)
 
-    # 优化目标 + 开关（表单外，切换即时生效并作废旧结果）
+    # 优化目标（切换即时生效并作废旧结果）
     mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险预算"],
                     horizontal=True, on_change=_invalidate_pf)
+
+    target_ret = 0.1
+    if mode == "目标收益":
+        target_ret = st.slider("目标年化收益", 0.0, 0.3, 0.1, 0.01, on_change=_invalidate_pf)
+
+    # 全局单资产权重上限（拉动时同步重置逐资产「最大」默认值）
+    max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05,
+                      on_change=_on_max_w_change)
+
+    # 逐资产权重边界：勾选后紧跟输入区，覆盖全局上限
+    bounds = None
     use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False,
                                 on_change=_invalidate_pf)
-    use_sector = st.checkbox("启用行业/板块集中度上限", value=False, on_change=_invalidate_pf)
-
-    # 优化参数（一次性设置后提交）
-    with st.form("pf_form"):
-        max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05)
-
-        target_ret = 0.1
-        if mode == "目标收益":
-            target_ret = st.slider("目标年化收益", 0.0, 0.3, 0.1, 0.01)
-
-        bounds = None
-        if use_per_asset:
+    if use_per_asset:
+        with st.expander("逐资产权重边界", expanded=True):
             per_bounds = []
             for i, lbl in enumerate(picks):
                 b1, b2 = st.columns(2)
                 with b1:
                     lo = st.number_input(f"{lbl} 最小", 0.0, 1.0, 0.0, 0.05,
-                                         key=f"pf_lo_{i}", format="%.2f")
+                                         key=f"pf_lo_{i}", format="%.2f",
+                                         on_change=_invalidate_pf)
                 with b2:
                     hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, max_w, 0.05,
-                                         key=f"pf_hi_{i}", format="%.2f")
+                                         key=f"pf_hi_{i}", format="%.2f",
+                                         on_change=_invalidate_pf)
                 per_bounds.append((lo, hi))
             bounds = per_bounds
 
-        sector_limit = None
-        if use_sector:
-            sector_limit = st.slider("单一行业/板块权重上限", 0.2, 1.0, 0.5, 0.05)
+    # 行业/板块集中度上限：勾选后紧跟滑动条
+    sector_limit = None
+    use_sector = st.checkbox("启用行业/板块集中度上限", value=False,
+                             on_change=_invalidate_pf)
+    if use_sector:
+        sector_limit = st.slider("单一行业/板块权重上限", 0.2, 1.0, 0.5, 0.05,
+                                 on_change=_invalidate_pf)
 
-        budget = None
-        if mode == "风险预算":
-            st.caption("各资产目标风险贡献占比（%），提交时自动归一化；默认各资产等额。")
+    # 风险预算：选中后紧跟输入区（默认各资产等风险贡献，提交时自动归一化）
+    budget = None
+    if mode == "风险预算":
+        with st.expander("风险预算（默认各资产等风险贡献）", expanded=True):
             budget_pct = []
             n_pick = max(len(picks), 1)
             for i, lbl in enumerate(picks):
                 budget_pct.append(st.number_input(f"{lbl} 风险预算(%)", 0.0, 100.0,
                                                  round(100.0 / n_pick, 1), 1.0,
-                                                 key=f"pf_budget_{i}", format="%.1f"))
+                                                 key=f"pf_budget_{i}", format="%.1f",
+                                                 on_change=_invalidate_pf))
             budget = [p / 100.0 for p in budget_pct]
 
-        submitted = st.form_submit_button("开始优化", type="primary", use_container_width=True)
-
-    if submitted:
+    if st.button("开始优化", type="primary", use_container_width=True):
         st.session_state["pf_done"] = True
+
     if not st.session_state.get("pf_done", False):
         st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
         return
