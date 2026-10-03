@@ -39,7 +39,13 @@ def build_return_matrix(prices_dict: dict) -> tuple:
             closes[name] = s
     if not closes:
         return None, None, None
-    px = pd.DataFrame(closes).dropna()
+    px = pd.DataFrame(closes)
+    # 先对齐到所有资产共有的交易日起止区间；区间内少量停牌缺失日做前向填充，
+    # 避免「单个资产某日缺失即丢弃当日全部资产」导致截面无谓损失。
+    common = px.dropna(how="any")
+    if common.empty:
+        return None, None, None
+    px = px.loc[common.index.min():common.index.max()].ffill().dropna(how="any")
     ret = px.pct_change().dropna()
     return ret, _robust_cov(ret) * config.TRADING_DAYS, ret.mean() * config.TRADING_DAYS
 
