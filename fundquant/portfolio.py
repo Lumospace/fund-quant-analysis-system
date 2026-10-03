@@ -456,7 +456,7 @@ def portfolio_tail_risk(ret: pd.DataFrame, weights: dict = None, alpha: float = 
 
 METHOD_LABELS = {
     "min_variance": "最小方差", "max_sharpe": "最大夏普",
-    "risk_parity": "风险平价", "equal_weight": "等权基准",
+    "risk_budgeting": "风险预算", "equal_weight": "等权基准",
     "target_return": "目标收益",
 }
 
@@ -481,7 +481,7 @@ def _solve_weights(ret: pd.DataFrame, mode: str, max_weight: float = 1.0,
 
     if mode == "equal_weight":
         return np.ones(n) / n
-    if mode == "risk_parity":
+    if mode == "risk_budgeting":
         return _risk_parity_weights(cov, bounds, ineq_cons)
     if mode == "min_variance":
         return _optimize(mu, cov, bounds, rf, lambda w: _portfolio_vol(w, cov),
@@ -510,7 +510,7 @@ def walk_forward_backtest(ret: pd.DataFrame, methods=None,
     n_assets = ret.shape[1]
     if n_assets < 2 or ret.shape[0] < train_window + step:
         return {}
-    methods = methods or ["min_variance", "max_sharpe", "risk_parity", "equal_weight"]
+    methods = methods or ["min_variance", "max_sharpe", "risk_budgeting", "equal_weight"]
 
     out = {}
     for m in methods:

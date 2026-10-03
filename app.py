@@ -262,7 +262,8 @@ def render_metrics_row(metrics, keys_labels, per_row=4):
         cols = st.columns(len(group))
         for col, (k, label) in zip(cols, group):
             v = metrics.get(k, "--")
-            v = "--" if v is None else v
+            if pd.isna(v):
+                v = ""
             metric_card(label, v, container=col)
 
 
@@ -939,9 +940,16 @@ def page_compare():
 
 
 # ==================== 页面 6：组合优化 ====================
+def _invalidate_pf():
+    """组合构建页开关/成分变化时作废已缓存结果，避免显示过期数据。"""
+    st.session_state.pop("pf_done", None)
+    st.session_state.pop("pf_cache", None)
+    st.session_state.pop("pf_walk_summary", None)
+
+
 def page_portfolio():
     st.header("投资组合量化优化")
-    st.caption("马科维茨均值-方差 / 风险平价 / 目标收益等多种优化方法")
+    st.caption("马科维茨均值-方差 / 风险预算 / 目标收益等多种优化方法")
     fkey = config.FUND_CLASS_KEY[st.session_state.fund_class]
     s = _universe_for(fkey)
     if s.empty:
@@ -955,17 +963,25 @@ def page_portfolio():
     options = s["label"].tolist()
     default = options[:3] if len(options) >= 3 else options
     picks = st.multiselect("选择成分基金（2~10 只，可搜索）", options, default=default,
-                           max_selections=10, key="pf_picks")
+                           max_selections=10, key="pf_picks", on_change=_invalidate_pf)
 
-    # 优化目标 + 权重边界 + 行业集中度（一次性设置后提交）
+    # 优化目标 + 开关（表单外，切换即时生效并作废旧结果）
+    mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险预算"],
+                    horizontal=True, on_change=_invalidate_pf)
+    use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False,
+                                on_change=_invalidate_pf)
+    use_sector = st.checkbox("启用行业/板块集中度上限", value=False, on_change=_invalidate_pf)
+
+    # 优化参数（一次性设置后提交）
     with st.form("pf_form"):
-        mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险平价", "风险预算"],
-                        horizontal=True)
-        target_ret = st.slider("目标年化收益（仅「目标收益」方法生效）", 0.0, 0.3, 0.1, 0.01)
         max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05)
 
-        use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False)
-        with st.expander("逐资产权重边界", expanded=False):
+        target_ret = 0.1
+        if mode == "目标收益":
+            target_ret = st.slider("目标年化收益", 0.0, 0.3, 0.1, 0.01)
+
+        bounds = None
+        if use_per_asset:
             per_bounds = []
             for i, lbl in enumerate(picks):
                 b1, b2 = st.columns(2)
@@ -973,17 +989,17 @@ def page_portfolio():
                     lo = st.number_input(f"{lbl} 最小", 0.0, 1.0, 0.0, 0.05,
                                          key=f"pf_lo_{i}", format="%.2f")
                 with b2:
-                    hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, 1.0, 0.05,
+                    hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, max_w, 0.05,
                                          key=f"pf_hi_{i}", format="%.2f")
                 per_bounds.append((lo, hi))
-        bounds = per_bounds if use_per_asset else None
+            bounds = per_bounds
 
-        use_sector = st.checkbox("启用行业/板块集中度上限", value=False)
-        sector_limit = st.slider("单一行业/板块权重上限（仅启用时生效）", 0.2, 1.0, 0.5, 0.05)
-        if not use_sector:
-            sector_limit = None
+        sector_limit = None
+        if use_sector:
+            sector_limit = st.slider("单一行业/板块权重上限", 0.2, 1.0, 0.5, 0.05)
 
-        with st.expander("风险预算（各资产目标风险贡献占比，仅「风险预算」方法生效）", expanded=False):
+        budget = None
+        if mode == "风险预算":
             st.caption("各资产目标风险贡献占比（%），提交时自动归一化；默认各资产等额。")
             budget_pct = []
             n_pick = max(len(picks), 1)
@@ -991,7 +1007,7 @@ def page_portfolio():
                 budget_pct.append(st.number_input(f"{lbl} 风险预算(%)", 0.0, 100.0,
                                                  round(100.0 / n_pick, 1), 1.0,
                                                  key=f"pf_budget_{i}", format="%.1f"))
-        budget = [p / 100.0 for p in budget_pct] if mode == "风险预算" else None
+            budget = [p / 100.0 for p in budget_pct]
 
         submitted = st.form_submit_button("开始优化", type="primary", use_container_width=True)
 
@@ -1007,7 +1023,8 @@ def page_portfolio():
 
     # 缓存主优化结果：后续点击「样本外回测」等按钮触发 rerun 时命中缓存，避免整页重算灰屏
     cache_key = (
-        fkey, mode, tuple(picks), round(max_w, 4), round(target_ret, 4),
+        fkey, mode, tuple(picks), round(max_w, 4),
+        round(target_ret, 4) if mode == "目标收益" else None,
         tuple((round(lo, 4), round(hi, 4)) for lo, hi in (bounds or [])),
         None if sector_limit is None else round(sector_limit, 4),
         None if budget is None else tuple(round(b, 4) for b in budget),
@@ -1031,8 +1048,7 @@ def page_portfolio():
                 return
             ret = pd.DataFrame({k: v.pct_change() for k, v in prices_dict.items()}).dropna()
             mode_key = {"最大夏普": "max_sharpe", "最小方差": "min_variance",
-                        "目标收益": "target_return", "风险平价": "risk_parity",
-                        "风险预算": "risk_budgeting"}[mode]
+                        "目标收益": "target_return", "风险预算": "risk_budgeting"}[mode]
             opt = pf.optimize_portfolio(ret, mode=mode_key,
                                         target_return=(target_ret if mode == "目标收益" else None),
                                         max_weight=max_w, bounds=bounds,
@@ -1088,7 +1104,7 @@ def page_portfolio():
     if st.button("运行样本外回测对比", key="pf_walk"):
         with st.spinner("滚动样本外回测中..."):
             wf = pf.walk_forward_backtest(
-                ret, methods=["min_variance", "max_sharpe", "risk_parity", "equal_weight"],
+                ret, methods=["min_variance", "max_sharpe", "risk_budgeting", "equal_weight"],
                 train_window=train_win, step=step, max_weight=max_w,
                 sector_limit=sector_limit)
         if not wf:
@@ -1109,8 +1125,7 @@ def page_portfolio():
     pf_html = report.build_portfolio_report_html(
         opt, ret, prices_dict, mode,
         {"最大夏普": "最大夏普比率", "最小方差": "最小方差",
-         "目标收益": "目标收益优化", "风险平价": "风险平价",
-         "风险预算": "风险预算"}.get(mode, mode),
+         "目标收益": "目标收益优化", "风险预算": "风险预算"}.get(mode, mode),
         walk_forward=walk_summary)
     st.download_button("下载组合优化报告（HTML）", data=pf_html,
                        file_name=f"portfolio_{pd.Timestamp.now():%Y%m%d}.html")
