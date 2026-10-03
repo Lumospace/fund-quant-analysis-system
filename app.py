@@ -882,6 +882,13 @@ def page_compare():
     st.success(f"在当前风格「{st.session_state.style}」下，综合评分最高：**{best}**"
                f"（{rank_df.iloc[0]['评级']}，{rank_df.iloc[0]['综合评分']} 分）")
 
+    compare_html = report.build_compare_report_html(
+        names, metrics_map, {nm: score_map[nm] for nm in names},
+        {nm: rating_map[nm] for nm in names},
+        breakdowns=breakdowns)
+    st.download_button("下载横向对比报告（HTML）", data=compare_html,
+                       file_name=f"fund_compare_{pd.Timestamp.now():%Y%m%d}.html")
+
 
 # ==================== 页面 6：组合优化 ====================
 def page_portfolio():
@@ -1014,6 +1021,13 @@ def page_portfolio():
     st.plotly_chart(charts.price_line({"组合": nav}, "组合净值（起点=1）", normalize=False),
                     width="stretch")
 
+    pf_html = report.build_portfolio_report_html(
+        opt, ret, prices_dict, mode,
+        {"最大夏普": "最大夏普比率", "最小方差": "最小方差",
+         "目标收益": "目标收益优化", "风险平价": "风险平价"}.get(mode, mode))
+    st.download_button("下载组合优化报告（HTML）", data=pf_html,
+                       file_name=f"portfolio_{pd.Timestamp.now():%Y%m%d}.html")
+
     # ---- 优化方法横向回测对比（滚动样本外） ----
     st.markdown("#### 优化方法横向回测对比（样本外）")
     st.caption("滚动训练窗口、逐步外推，评估各优化方法的样本外表现，避免仅看一次全样本"
@@ -1115,6 +1129,11 @@ def page_allocation():
             else:
                 st.info(f"再平衡夏普 {rb_s['夏普比率']:.2f} < 买入持有 {bh_s['夏普比率']:.2f}，"
                         f"受趋势/交易成本影响，本次区间再平衡未跑赢。")
+
+    alloc_html = report.build_allocation_report_html(method, weights, stats)
+    st.download_button("下载大类资产配置报告（HTML）", data=alloc_html,
+                       file_name=f"allocation_{pd.Timestamp.now():%Y%m%d}.html")
+
     st.caption(config.RISK_DISCLAIMER)
 
 
@@ -1370,6 +1389,10 @@ def page_stress():
         ]
         full_table(pd.DataFrame(tail_rows))
         st.caption(tr["说明"] + "。分散化收益为正表示相关性令组合尾部损失小于各资产独立相加。")
+
+    stress_html = report.build_stress_report_html(obj_name, res, navs=navs if navs else None)
+    st.download_button("下载压力测试报告（HTML）", data=stress_html,
+                       file_name=f"stress_test_{pd.Timestamp.now():%Y%m%d}.html")
 
 
 # ==================== 页面 11：一键报告 ====================
