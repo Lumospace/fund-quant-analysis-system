@@ -72,8 +72,9 @@ def inject_css():
         word-break:break-word; text-align:left; color:{C['text']};}}
     .dtable tr:nth-child(even) td {{background:{C['bg']};}}
     {f"""
-    /* === 深色模式：所有非侧边栏亮色覆盖 === */
-    .stApp p, .stApp span, .stApp li, .stApp div:not([data-baseweb]) {{color: {C['text']} !important;}}
+    /* === 深色模式：正文与原生组件色彩适配（保留涨跌红绿等语义色） === */
+    [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
+    [data-testid="stCaptionContainer"] p {{color: {C['text']} !important;}}
     .stApp label, .stApp .stSelectbox label, .stApp .stRadio label {{color: {C['text']} !important;}}
     .stApp .st-bb, .stApp .st-at, .stApp .st-aw {{color: {C['text']} !important;}}
     .stApp .st-emotion-cache-1vt4y43, .stApp .st-emotion-cache-15hul6a {{color: {C['text']} !important;}}
@@ -1451,9 +1452,10 @@ def page_stress(preset_mode=None):
         full_table(pd.DataFrame(tail_rows))
         st.caption(tr["说明"] + "。分散化收益为正表示相关性令组合尾部损失小于各资产独立相加。")
 
-    stress_html = report.build_stress_report_html(obj_name, res, navs=navs if navs else None)
-    st.download_button("下载压力测试报告（HTML）", data=stress_html,
-                       file_name=f"stress_test_{pd.Timestamp.now():%Y%m%d}.html")
+    if mode == "组合":
+        stress_html = report.build_stress_report_html(obj_name, res, navs=navs if navs else None)
+        st.download_button("下载压力测试报告（HTML）", data=stress_html,
+                           file_name=f"stress_test_{pd.Timestamp.now():%Y%m%d}.html")
 
 
 # ==================== 页面 11：一键报告 ====================
