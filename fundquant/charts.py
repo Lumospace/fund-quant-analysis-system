@@ -78,6 +78,7 @@ def drawdown_chart(prices_or_nav: pd.Series, title="回撤走势"):
     fig = go.Figure(go.Scatter(x=dd.index, y=dd.values, fill="tozeroy",
                                line=dict(color=C["down"], width=1.5), name="回撤"))
     fig.add_hline(y=0, line_color="#cbd5e1", line_width=1)
+    fig.update_yaxes(title="回撤 (%)")
     return _base(fig, title, showlegend=False)
 
 
@@ -145,6 +146,7 @@ def smile_chart(smile: pd.DataFrame, title="定投微笑曲线"):
                              line=dict(color=C["up"], width=2)))
     fig.add_trace(go.Scatter(x=smile.index, y=smile["盈亏"], name="盈亏",
                              line=dict(color=C["accent"], width=1.5, dash="dot")))
+    fig.update_yaxes(title="金额（元）")
     return _base(fig, title)
 
 

@@ -223,8 +223,9 @@ def full_table(df: pd.DataFrame):
             f"<td>{_html.escape('' if v is None else str(v).replace(chr(10), '<br>'))}</td>"
             for v in r) + "</tr>")
     st.markdown(
+        f"<div style='overflow-x:auto;'>"
         f"<table class='dtable'><thead><tr>{head}</tr></thead>"
-        f"<tbody>{''.join(body)}</tbody></table>",
+        f"<tbody>{''.join(body)}</tbody></table></div>",
         unsafe_allow_html=True)
 
 
