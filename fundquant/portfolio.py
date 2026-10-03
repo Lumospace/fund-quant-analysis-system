@@ -146,13 +146,20 @@ def _build_sector_constraints(names, sector_limit):
     return cons, groups, note
 
 
-def _risk_parity_weights(cov: np.ndarray, bounds, ineq_cons=None) -> np.ndarray:
-    """风险平价（等风险贡献，ERC）权重。
+def _risk_parity_weights(cov: np.ndarray, bounds, ineq_cons=None, budget=None) -> np.ndarray:
+    """风险平价 / 风险预算权重。
 
-    最小化各资产对组合风险贡献与平均贡献之差的平方和，使每个资产
-    贡献相同比例的组合波动率，比马科维茨更稳健、不易集中于单一资产。
+    风险平价（budget=None）：每个资产风险贡献相等（1/n），即等风险贡献 ERC。
+    风险预算（budget 给定）：每个资产风险贡献 = 预设预算比例（自动归一化）。
+    二者都最小化各资产实际风险贡献与目标预算之差的平方和，比马科维茨更稳健、
+    不易集中于单一资产。
     """
     n = cov.shape[0]
+    b = np.full(n, 1.0 / n)
+    if budget is not None:
+        arr = np.asarray(budget, dtype=float)
+        if arr.shape == (n,) and arr.sum() > 0:
+            b = arr / arr.sum()
 
     def obj(w):
         w = np.asarray(w, dtype=float)
@@ -160,7 +167,7 @@ def _risk_parity_weights(cov: np.ndarray, bounds, ineq_cons=None) -> np.ndarray:
         if pvar <= 1e-14:
             return 1e9
         rc = w * (cov @ w) / pvar
-        return float(np.sum((rc - 1.0 / n) ** 2))
+        return float(np.sum((rc - b) ** 2))
 
     rng = np.random.default_rng(0)
     starts = [np.ones(n) / n] + [rng.dirichlet(np.ones(n)) for _ in range(24)]
@@ -190,14 +197,15 @@ def _risk_parity_weights(cov: np.ndarray, bounds, ineq_cons=None) -> np.ndarray:
 
 def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
                        target_return: float = None, max_weight: float = 1.0,
-                       bounds=None, sector_limit=None,
+                       bounds=None, sector_limit=None, budget=None,
                        return_frontier: bool = False):
     """投资组合优化。
 
-    mode: min_variance / max_sharpe / target_return / risk_parity
+    mode: min_variance / max_sharpe / target_return / risk_parity / risk_budgeting
     max_weight: 单资产权重上限（bounds 未提供时使用）
     bounds: 逐资产边界 [(min,max), ...]，长度须等于资产数，优先于 max_weight
     sector_limit: 行业/板块集中度上限（0~1），None 表示不限制
+    budget: 风险预算模式下各资产目标风险贡献比例（长度=资产数，自动归一化；缺省等额）
     返回结果字典。
     """
     mu = ret.mean().values * config.TRADING_DAYS
@@ -229,6 +237,8 @@ def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
 
     if mode == "risk_parity":
         w = _risk_parity_weights(cov, bounds, ineq_cons)
+    elif mode == "risk_budgeting":
+        w = _risk_parity_weights(cov, bounds, ineq_cons, budget)
     elif mode == "min_variance":
         w = _optimize(mu, cov, bounds, rf, obj_minvar, ineq_cons=ineq_cons)
     elif mode == "target_return" and target_return is not None:
@@ -254,7 +264,7 @@ def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
         "stats": portfolio_stats(w, ret),
         "note": "；".join(notes) or None,
     }
-    if return_frontier and mode != "risk_parity":
+    if return_frontier and mode not in ("risk_parity", "risk_budgeting"):
         result["frontier"] = _efficient_frontier(mu, cov, bounds, rf, ineq_cons=ineq_cons)
     return result
 

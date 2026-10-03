@@ -953,7 +953,7 @@ def page_portfolio():
 
     # 优化目标 + 权重边界 + 行业集中度（一次性设置后提交）
     with st.form("pf_form"):
-        mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险平价"],
+        mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险平价", "风险预算"],
                         horizontal=True)
         target_ret = st.slider("目标年化收益（仅「目标收益」方法生效）", 0.0, 0.3, 0.1, 0.01)
         max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05)
@@ -977,6 +977,16 @@ def page_portfolio():
         if not use_sector:
             sector_limit = None
 
+        with st.expander("风险预算（各资产目标风险贡献占比，仅「风险预算」方法生效）", expanded=False):
+            st.caption("各资产目标风险贡献占比（%），提交时自动归一化；默认各资产等额。")
+            budget_pct = []
+            n_pick = max(len(picks), 1)
+            for i, lbl in enumerate(picks):
+                budget_pct.append(st.number_input(f"{lbl} 风险预算(%)", 0.0, 100.0,
+                                                 round(100.0 / n_pick, 1), 1.0,
+                                                 key=f"pf_budget_{i}", format="%.1f"))
+        budget = [p / 100.0 for p in budget_pct] if mode == "风险预算" else None
+
         submitted = st.form_submit_button("开始优化", type="primary", use_container_width=True)
 
     if submitted:
@@ -994,6 +1004,7 @@ def page_portfolio():
         fkey, mode, tuple(picks), round(max_w, 4), round(target_ret, 4),
         tuple((round(lo, 4), round(hi, 4)) for lo, hi in (bounds or [])),
         None if sector_limit is None else round(sector_limit, 4),
+        None if budget is None else tuple(round(b, 4) for b in budget),
         default_start(), default_end(),
     )
     pf_cache = st.session_state.get("pf_cache")
@@ -1014,11 +1025,14 @@ def page_portfolio():
                 return
             ret = pd.DataFrame({k: v.pct_change() for k, v in prices_dict.items()}).dropna()
             mode_key = {"最大夏普": "max_sharpe", "最小方差": "min_variance",
-                        "目标收益": "target_return", "风险平价": "risk_parity"}[mode]
+                        "目标收益": "target_return", "风险平价": "risk_parity",
+                        "风险预算": "risk_budgeting"}[mode]
             opt = pf.optimize_portfolio(ret, mode=mode_key,
                                         target_return=(target_ret if mode == "目标收益" else None),
                                         max_weight=max_w, bounds=bounds,
-                                        sector_limit=sector_limit, return_frontier=True)
+                                        sector_limit=sector_limit,
+                                        budget=(budget if mode == "风险预算" else None),
+                                        return_frontier=True)
         st.session_state["pf_cache"] = {"key": cache_key, "prices_dict": prices_dict,
                                         "ret": ret, "opt": opt}
 
@@ -1089,7 +1103,8 @@ def page_portfolio():
     pf_html = report.build_portfolio_report_html(
         opt, ret, prices_dict, mode,
         {"最大夏普": "最大夏普比率", "最小方差": "最小方差",
-         "目标收益": "目标收益优化", "风险平价": "风险平价"}.get(mode, mode),
+         "目标收益": "目标收益优化", "风险平价": "风险平价",
+         "风险预算": "风险预算"}.get(mode, mode),
         walk_forward=walk_summary)
     st.download_button("下载组合优化报告（HTML）", data=pf_html,
                        file_name=f"portfolio_{pd.Timestamp.now():%Y%m%d}.html")
