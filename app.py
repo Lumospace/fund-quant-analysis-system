@@ -785,53 +785,31 @@ def page_compare():
     if s.empty:
         st.warning("数据不可用")
         return
-    picked = st.session_state.setdefault("cmp_picked", [])
+    # 场外基金池过大，先用搜索收窄候选（即时过滤）
+    if fkey == "otc":
+        s = _search_narrow(s, "cmp_search", max_rows=300)
 
-    st.markdown("#### 选择对比基金（2~6 只）")
-    kw = st.text_input("搜索基金（名称/代码）", "", key="cmp_search_box")
-    cand = s
-    if kw:
-        cand = s[(s["label"].str.contains(kw, case=False, regex=False))
-                 | (s["code"].astype(str).str.contains(kw, regex=False))]
-    cand = cand.head(300)
-    if cand.empty:
-        st.info("未匹配到相关基金，请更换搜索词。")
+    with st.form("cmp_form"):
+        options = s["label"].tolist()
+        default = options[:2] if len(options) >= 2 else options
+        picks = st.multiselect("选择对比基金（2~6 只，可搜索）", options, default=default,
+                               max_selections=6, key="cmp_picks")
+        t1, t2 = st.columns(2)
+        with t1:
+            start_date = st.date_input("开始时间", value=_dt.date.today() - _dt.timedelta(days=3 * 365),
+                                       min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
+        with t2:
+            end_date = st.date_input("结束时间", value=_dt.date.today(),
+                                     min_value=start_date, max_value=_dt.date.today())
+        submitted = st.form_submit_button("开始对比", type="primary", use_container_width=True)
+
+    if not submitted:
+        st.info("选择对比基金并设置日期后，点击「开始对比」。")
         return
-
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        pick_one = st.selectbox("搜索后下拉选择基金", cand["label"].tolist(), key="cmp_pick_one")
-    with c2:
-        st.write("")
-        st.write("")
-        if st.button("添加", key="cmp_add"):
-            if pick_one not in picked and len(picked) < 6:
-                picked.append(pick_one)
-
-    if picked and st.button("清空已选", key="cmp_clear"):
-        picked.clear()
-
-    picks = list(picked)
-    for i, lbl in enumerate(picks):
-        col_a, col_b = st.columns([7, 1])
-        nm = s[s["label"] == lbl]["name"].iloc[0] if (s["label"] == lbl).any() else lbl
-        sec = data.classify_sector(nm)
-        col_a.markdown(f"{i+1}. {lbl}　·　{sec}")
-        if col_b.button("移除", key=f"cmp_rm_{i}"):
-            picked.pop(i)
-            st.rerun()
 
     if len(picks) < 2:
-        st.info("请先在上方搜索并「添加」至少 2 只基金进行对比。")
+        st.warning("请至少选择 2 只基金进行对比。")
         return
-
-    t1, t2 = st.columns(2)
-    with t1:
-        start_date = st.date_input("开始时间", value=_dt.date.today() - _dt.timedelta(days=3 * 365),
-                                   min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
-    with t2:
-        end_date = st.date_input("结束时间", value=_dt.date.today(),
-                                 min_value=start_date, max_value=_dt.date.today())
     if start_date >= end_date:
         st.warning("开始时间需早于结束时间")
         return
@@ -917,57 +895,25 @@ def page_portfolio():
     if s.empty:
         st.warning("数据不可用")
         return
-    # 已选成分基金（跨 rerun 保留）
-    picked = st.session_state.setdefault("pf_picked", [])
+    # 场外基金池过大时，先搜索收窄候选（即时过滤）
+    if fkey == "otc":
+        s = _search_narrow(s, "pf_search", max_rows=300)
 
-    st.markdown("#### 选择成分基金")
-    kw = st.text_input("搜索基金（名称/代码）", "", key="pf_search_box")
-    cand = s
-    if kw:
-        cand = s[(s["label"].str.contains(kw, case=False, regex=False))
-                 | (s["code"].astype(str).str.contains(kw, regex=False))]
-    cand = cand.head(300)
+    # 选择成分基金（多选，选好后随下方表单一并提交）
+    options = s["label"].tolist()
+    default = options[:3] if len(options) >= 3 else options
+    picks = st.multiselect("选择成分基金（2~10 只，可搜索）", options, default=default,
+                           max_selections=10, key="pf_picks")
 
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        pick_one = st.selectbox("搜索后下拉选择基金", cand["label"].tolist(), key="pf_pick_one")
-    with c2:
-        st.write("")
-        st.write("")
-        if st.button("添加", width="stretch"):
-            if pick_one not in picked:
-                picked.append(pick_one)
+    # 优化目标 + 权重边界 + 行业集中度（一次性设置后提交）
+    with st.form("pf_form"):
+        mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险平价"],
+                        horizontal=True)
+        target_ret = st.slider("目标年化收益（仅「目标收益」方法生效）", 0.0, 0.3, 0.1, 0.01)
+        max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05)
 
-    if picked and st.button("清空已选", key="pf_clear"):
-        picked.clear()
-
-    picks = list(picked)
-    for i, lbl in enumerate(picks):
-        col_a, col_b = st.columns([7, 1])
-        nm = s[s["label"] == lbl]["name"].iloc[0] if (s["label"] == lbl).any() else lbl
-        sec = data.classify_sector(nm)
-        col_a.markdown(f"{i+1}. {lbl}　·　{sec}")
-        if col_b.button("移除", key=f"pf_rm_{i}"):
-            picked.pop(i)
-            st.rerun()
-
-    if len(picks) < 2:
-        st.info("请先在上方搜索并「添加」至少 2 只基金构建组合。")
-        return
-
-    # 优化目标 + 权重边界 + 行业集中度
-    mode = st.radio("优化目标", ["最小方差", "最大夏普", "目标收益", "风险平价"],
-                    horizontal=True)
-    target = None
-    if mode == "目标收益":
-        target = st.slider("目标年化收益", 0.0, 0.3, 0.1, 0.01)
-
-    max_w = st.slider("单资产权重上限（1.0 = 不限制）", 0.2, 1.0, 1.0, 0.05)
-
-    bounds = None
-    use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False)
-    if use_per_asset:
-        with st.expander("逐资产权重边界", expanded=True):
+        use_per_asset = st.checkbox("启用逐资产权重边界（覆盖全局上限）", value=False)
+        with st.expander("逐资产权重边界", expanded=False):
             per_bounds = []
             for i, lbl in enumerate(picks):
                 b1, b2 = st.columns(2)
@@ -975,15 +921,25 @@ def page_portfolio():
                     lo = st.number_input(f"{lbl} 最小", 0.0, 1.0, 0.0, 0.05,
                                          key=f"pf_lo_{i}", format="%.2f")
                 with b2:
-                    hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, max_w, 0.05,
+                    hi = st.number_input(f"{lbl} 最大", 0.0, 1.0, 1.0, 0.05,
                                          key=f"pf_hi_{i}", format="%.2f")
                 per_bounds.append((lo, hi))
-            bounds = per_bounds
+        bounds = per_bounds if use_per_asset else None
 
-    sector_limit = None
-    use_sector = st.checkbox("启用行业/板块集中度上限", value=False)
-    if use_sector:
-        sector_limit = st.slider("单一行业/板块权重上限", 0.2, 1.0, 0.5, 0.05)
+        use_sector = st.checkbox("启用行业/板块集中度上限", value=False)
+        sector_limit = st.slider("单一行业/板块权重上限（仅启用时生效）", 0.2, 1.0, 0.5, 0.05)
+        if not use_sector:
+            sector_limit = None
+
+        submitted = st.form_submit_button("开始优化", type="primary", use_container_width=True)
+
+    if not submitted:
+        st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
+        return
+
+    if len(picks) < 2:
+        st.warning("请至少选择 2 只基金构建组合。")
+        return
 
     with st.spinner("拉取成分行情并优化..."):
         prices_dict = {}
@@ -1001,7 +957,8 @@ def page_portfolio():
 
     mode_key = {"最大夏普": "max_sharpe", "最小方差": "min_variance",
                 "目标收益": "target_return", "风险平价": "risk_parity"}[mode]
-    opt = pf.optimize_portfolio(ret, mode=mode_key, target_return=target,
+    opt = pf.optimize_portfolio(ret, mode=mode_key,
+                                target_return=(target_ret if mode == "目标收益" else None),
                                 max_weight=max_w, bounds=bounds,
                                 sector_limit=sector_limit, return_frontier=True)
 
@@ -1080,13 +1037,30 @@ def page_allocation():
     st.caption("基于 股票/债券/黄金/现金 四类代表性 ETF（沪深300 / 国债 / 黄金 / 货币）真实行情，"
                "提供跨资产配置与周期性再平衡回测。")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        start = st.date_input("开始日期", value=_dt.date(2015, 1, 1),
-                              min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
-    with c2:
-        end = st.date_input("结束日期", value=_dt.date.today(),
-                            min_value=start, max_value=_dt.date.today())
+    with st.form("alloc_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            start = st.date_input("开始日期", value=_dt.date(2015, 1, 1),
+                                  min_value=_dt.date(2010, 1, 1), max_value=_dt.date.today())
+        with c2:
+            end = st.date_input("结束日期", value=_dt.date.today(),
+                                min_value=start, max_value=_dt.date.today())
+
+        m1, m2 = st.columns(2)
+        with m1:
+            method = st.selectbox("配置方法", allocation.ALLOCATION_METHODS, index=3)
+        with m2:
+            target_vol = st.slider("目标波动率(年化 · 仅「目标波动」方法生效)", 0.03, 0.25, 0.08, 0.01)
+
+        submitted = st.form_submit_button("开始配置", type="primary", use_container_width=True)
+
+    if not submitted:
+        st.info("设置好日期、配置方法与目标波动率后，点击「开始配置」。")
+        return
+
+    if start >= end:
+        st.warning("开始日期需早于结束日期")
+        return
     start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
     with st.spinner("拉取大类资产行情..."):
@@ -1098,13 +1072,6 @@ def page_allocation():
 
     st.markdown("#### 各类资产历史走势（归一化 = 1）")
     st.plotly_chart(charts.price_line(prices_dict, "大类资产归一化走势"), width="stretch")
-
-    m1, m2 = st.columns(2)
-    with m1:
-        method = st.selectbox("配置方法", allocation.ALLOCATION_METHODS, index=3)
-    with m2:
-        target_vol = st.slider("目标波动率(年化)", 0.03, 0.25, 0.08, 0.01,
-                               disabled=(method != "目标波动"))
 
     st.markdown("#### 目标配置权重")
     weights, stats = allocation.method_perf(ret, method, target_vol)
