@@ -55,7 +55,7 @@ def _make_dataset(X_full: pd.DataFrame, prices: pd.Series, horizon: int):
     """
     y = ((prices.shift(-horizon) / prices - 1) > 0).astype(int)
     data = pd.concat([X_full, y.rename("label")], axis=1).dropna()
-    if len(data) < 60:
+    if len(data) < 120:
         return None, None
     X = data.drop(columns=["label"]).astype(float)
     return X, data["label"]
@@ -106,7 +106,8 @@ def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, n_splits: int = 5):
             continue
         model = _fit_model(X.iloc[:train_end], y.iloc[:train_end])
         probs[train_end:test_end] = model.predict_proba(X.iloc[train_end:test_end])[:, 1]
-    return probs, min_train
+    # 返回最后一个可见训练窗口的终点，供最终预测模型复用（避免全样本重训泄漏未来信息）
+    return probs, min_train, int(bounds[-2])
 
 
 def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: int) -> dict:
@@ -115,12 +116,13 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
     稳健性改进：
     1. 用 walk-forward 滚动校验估计样本外 AUC/Brier，替代固定 60/80 单次切分；
     2. 按正负样本比例温和加权，缓解类别不平衡对概率的偏置；
-    3. 最终模型用全样本训练，仅用于预测最新一日的上涨概率与特征重要性。
+    3. 最终模型复用 walk-forward 最后一个「已可见」训练窗口，避免全样本重训引入未来信息泄漏，
+       保证最新一日概率预测与样本外校验口径（时序外推）一致。
     """
     from sklearn.metrics import roc_auc_score, brier_score_loss
 
     try:
-        oos_probs, min_train = _walk_forward_eval(X, y)
+        oos_probs, min_train, last_train_end = _walk_forward_eval(X, y)
         mask = ~np.isnan(oos_probs)
         n_test = int(mask.sum())
 
@@ -131,8 +133,8 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
                 auc_oos = float(roc_auc_score(y[mask], oos_probs[mask]))
             brier_oos = float(brier_score_loss(y[mask], oos_probs[mask]))
 
-        # 最终模型：全样本训练，预测最新一行
-        model = _fit_model(X, y)
+        # 最终模型：复用 walk-forward 最后一个可见窗口（截至 last_train_end），预测最新一行
+        model = _fit_model(X.iloc[:last_train_end], y.iloc[:last_train_end])
         prob_up = float(model.predict_proba(X.iloc[-1:])[0][1])
         imp = dict(zip(X.columns, model.feature_importances_))
         imp = dict(sorted(imp.items(), key=lambda kv: kv[1], reverse=True)[:8])
@@ -251,9 +253,9 @@ def calibration_curve_data(prices: pd.Series, hist: pd.DataFrame,
     """
     X_full = _build_features(prices, hist, pe_hist, ff)
     X, y = _make_dataset(X_full, prices, horizon)
-    if X is None or len(X) < 60:
+    if X is None or len(X) < 120:
         return {}
-    oos_probs, _ = _walk_forward_eval(X, y)
+    oos_probs, _, _ = _walk_forward_eval(X, y)
     mask = ~np.isnan(oos_probs)
     if mask.sum() < 10:
         return {}
