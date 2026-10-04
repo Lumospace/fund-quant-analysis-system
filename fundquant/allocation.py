@@ -43,7 +43,13 @@ def asset_class_returns(start: str = None, end: str = None):
         prices[cls_name] = pd.Series(s.values, index=pd.to_datetime(h["date"]))
     if len(prices) < 2:
         return {}, pd.DataFrame()
-    px = pd.DataFrame(prices).dropna()
+    px = pd.DataFrame(prices)
+    # 与 portfolio.build_return_matrix 同口径：先对齐到各类资产共有交易日起止区间，
+    # 区间内个别缺失日做前向填充，避免「某一类资产某日无行情即丢弃当日全部资产」。
+    common = px.dropna(how="any")
+    if common.empty:
+        return {}, pd.DataFrame()
+    px = px.loc[common.index.min():common.index.max()].ffill().dropna(how="any")
     ret = px.pct_change().dropna()
     return {k: prices[k] for k in px.columns}, ret
 
