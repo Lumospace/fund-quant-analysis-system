@@ -1050,6 +1050,13 @@ def page_portfolio():
         st.warning("开始日期需早于结束日期。")
         return
 
+    # 逐资产边界前置校验：单只「最小」不得超过其「最大」（在全局/可行性校验之外）
+    if bounds:
+        bad = [(picks[i], lo, hi) for i, (lo, hi) in enumerate(bounds) if lo > hi]
+        if bad:
+            st.warning("存在「最小」大于「最大」的成分：" + "、".join(n for n, _, _ in bad) + "，请调整后再试。")
+            return
+
     # 缓存主优化结果：后续点击「样本外回测」等按钮触发 rerun 时命中缓存，避免整页重算灰屏
     cache_key = (
         fkey, mode, tuple(picks), round(max_w, 4),
