@@ -141,7 +141,7 @@ def pie_chart(weights: dict, title="组合权重分布"):
     fig = _base(fig, title, height=400, showlegend=True)
     fig.update_layout(
         legend=dict(orientation="h", yanchor="top", y=-0.15,
-                    xanchor="center", x=0.5, font=dict(size=12)),
+                    xanchor="center", x=0.5, font=dict(size=13)),
         margin=dict(l=20, r=20, t=60, b=70))
     return fig
 
@@ -251,7 +251,7 @@ def corr_heatmap(corr: pd.DataFrame, title="成分相关性矩阵"):
     fig = go.Figure(go.Heatmap(
         z=z, x=labels, y=labels, zmin=-1, zmax=1,
         colorscale=[[0.0, _pal()["accent"]], [0.5, _pal()["mid"]], [1.0, _pal()["up"]]],
-        text=text, texttemplate="%{text}", textfont=dict(size=11, color=_pal()["text"]),
+        text=text, texttemplate="%{text}", textfont=dict(size=12, color=_pal()["text"]),
         colorbar=dict(title="相关系数", thickness=14),
         hovertemplate="%{y} × %{x}: %{z:.2f}<extra></extra>"))
     fig.update_yaxes(autorange="reversed")
@@ -339,14 +339,14 @@ def reliability_diagram(calib_data: dict, title="概率校准曲线 (Reliability
                                          line=dict(color="#1f2937", width=1)),
                              text=[f"n={c}" for c in counts],
                              textposition="top center",
-                             textfont=dict(size=10, color=_pal()["neutral"]),
+                             textfont=dict(size=11.5, color=_pal()["neutral"]),
                              name="实际观测", showlegend=False))
     fig.update_xaxes(title="预测概率", range=[-0.05, 1.05], dtick=0.1)
     fig.update_yaxes(title="实际发生频率", range=[-0.05, 1.05], dtick=0.1)
     fig.add_annotation(x=0.95, y=0.05, text="高估", showarrow=False,
-                       font=dict(size=12, color=_pal()["text_secondary"]))
+                       font=dict(size=13, color=_pal()["text_secondary"]))
     fig.add_annotation(x=0.05, y=0.95, text="低估", showarrow=False,
-                       font=dict(size=12, color=_pal()["text_secondary"]))
+                       font=dict(size=13, color=_pal()["text_secondary"]))
     return _base(fig, title, height=400, showlegend=True)
 
 

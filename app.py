@@ -74,6 +74,8 @@ def inject_css():
     [data-testid="stMain"] [data-testid="stMarkdownContainer"] p,
     [data-testid="stMain"] [data-testid="stMarkdownContainer"] li {{font-size: 17px;}}
     [data-testid="stMain"] [data-testid="stMarkdownContainer"] h4 {{font-size: 18px;}}
+    /* 说明/批注文字（caption）：微调大，提升可读性 */
+    [data-testid="stMain"] [data-testid="stCaptionContainer"] p {{font-size: 14.5px;}}
     .stApp {{background: {C['bg']};
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
                      "Helvetica Neue", Arial, sans-serif;}}
@@ -534,8 +536,8 @@ def sidebar():
     st.sidebar.markdown("---")
     st.sidebar.caption(f"数据更新时间：{_dt.datetime.now():%Y-%m-%d %H:%M}")
     st.sidebar.markdown(
-        "<div style='font-size:11px; line-height:1.5; color:#cbd5e1'>仅供研究参考，不构成投资建议</div>"
-        f"<div style='font-size:10px; line-height:1.5; color:#9fb3cd; margin-top:4px;'>{RISK}</div>",
+        "<div style='font-size:12.5px; line-height:1.5; color:#e2e8f0'>仅供研究参考，不构成投资建议</div>"
+        f"<div style='font-size:11.5px; line-height:1.5; color:#b8c6da; margin-top:4px;'>{RISK}</div>",
         unsafe_allow_html=True)
     return st.session_state["page"]
 
