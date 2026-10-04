@@ -451,17 +451,17 @@ def sidebar():
     dark = _d2.checkbox("深色模式", value=st.session_state.dark_mode,
                          key="dark_toggle", label_visibility="collapsed")
     st.session_state.dark_mode = dark
-    st.session_state.setdefault("page", "数据驾驶舱")
+    st.session_state.setdefault("active_page", "数据驾驶舱")
     for section, items in NAV_TREE:
         if section:
             st.sidebar.markdown(f"**{section}**")
         for name, emoji in items:
-            active = st.session_state["page"] == name
+            active = st.session_state["active_page"] == name
             if st.sidebar.button(f"{emoji} {name}", key=f"nav_{name}",
                                  use_container_width=True,
                                  type="primary" if active else "secondary"):
-                st.session_state["page"] = name
-                st.rerun()
+                st.session_state["active_page"] = name   # 仅用于按钮高亮
+                st.switch_page(PAGES[name])
 
     st.sidebar.markdown("---")
     st.session_state.style = st.sidebar.selectbox(
@@ -539,7 +539,6 @@ def sidebar():
         "<div style='font-size:12.5px; line-height:1.5; color:#e2e8f0'>仅供研究参考，不构成投资建议</div>"
         f"<div style='font-size:11.5px; line-height:1.5; color:#b8c6da; margin-top:4px;'>{RISK}</div>",
         unsafe_allow_html=True)
-    return st.session_state["page"]
 
 
 def cur_fund():
@@ -1861,34 +1860,38 @@ def page_report():
 
 
 # ==================== 主入口 ====================
+# 用 st.Page 把各页面注册为官方多页路由，切页走真正的路由跳转（旧页卸载、无透视），
+# 并为后续公网部署提供独立 URL/深链能力。
 PAGES = {
-    "数据驾驶舱": page_dashboard,
-    "基金画像": page_profile,
-    "基金筛选": page_screener,
-    "定投测算": page_dca,
-    "策略回测对比": page_backtest,
-    "压力测试（单基金）": lambda: page_stress("单基金"),
-    "一键量化报告": page_report,
-    "基金对比": page_compare,
-    "组合构建": page_portfolio,
-    "大类资产配置": page_allocation,
-    "压力测试（组合）": lambda: page_stress("组合"),
+    "数据驾驶舱": st.Page(page_dashboard, title="数据驾驶舱", icon="📊", url_path="dashboard"),
+    "基金画像": st.Page(page_profile, title="基金画像", icon="🔍", url_path="profile"),
+    "基金筛选": st.Page(page_screener, title="基金筛选", icon="⚖️", url_path="screener"),
+    "定投测算": st.Page(page_dca, title="定投测算", icon="💰", url_path="dca"),
+    "策略回测对比": st.Page(page_backtest, title="策略回测对比", icon="📈", url_path="backtest"),
+    "压力测试（单基金）": st.Page(lambda: page_stress("单基金"), title="压力测试（单基金）", icon="🛡️", url_path="stress_single"),
+    "一键量化报告": st.Page(page_report, title="一键量化报告", icon="📄", url_path="report"),
+    "基金对比": st.Page(page_compare, title="基金对比", icon="🔄", url_path="compare"),
+    "组合构建": st.Page(page_portfolio, title="组合构建", icon="🧩", url_path="portfolio"),
+    "大类资产配置": st.Page(page_allocation, title="大类资产配置", icon="🌐", url_path="allocation"),
+    "压力测试（组合）": st.Page(lambda: page_stress("组合"), title="压力测试（组合）", icon="🛡️", url_path="stress_portfolio"),
 }
 
 
 def main():
+    # st.navigation 必须在其它 st 命令之前调用（st.set_page_config 已在顶部）
+    nav = st.navigation(list(PAGES.values()), position="hidden")
     if "style" not in st.session_state:
         st.session_state.style = "稳健"
     if "horizon" not in st.session_state:
         st.session_state.horizon = "中期（1-3年）"
     if "fund_class" not in st.session_state:
         st.session_state.fund_class = "场内ETF"
-    page = sidebar()  # 此处会写入 st.session_state.dark_mode
-    inject_css()      # 基于最新 dark_mode 注入样式，避免主题滞后一次交互
+    sidebar()        # 自定义侧边栏（导航按钮改为 st.switch_page）
+    inject_css()     # 基于最新 dark_mode 注入样式，避免主题滞后一次交互
     import fundquant.charts as _charts
     _charts.set_palette(st.session_state.dark_mode)
     try:
-        PAGES[page]()
+        nav.run()    # 渲染当前选中页面
     except Exception as e:
         st.error(f"页面运行时出错：{e}")
         st.exception(e)
