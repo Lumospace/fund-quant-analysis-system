@@ -399,6 +399,19 @@ def full_table(df: pd.DataFrame, height: int = None):
     st.markdown(f"<div style='{style}'>{html}</div>", unsafe_allow_html=True)
 
 
+# ==================== 绘图统一配置 ====================
+PLOTLY_CONFIG = {
+    "displayLogo": False,      # 隐藏 Plotly logo，画面更干净
+    "scrollZoom": False,       # 关闭滚轮缩放，避免与页面滚动冲突
+}
+
+
+def _plot(fig, **kwargs):
+    """统一 st.plotly_chart 入口，注入一致的交互配置（去 logo、关滚轮缩放）。"""
+    kwargs.setdefault("config", PLOTLY_CONFIG)
+    st.plotly_chart(fig, **kwargs)
+
+
 def _fund_labels(u: pd.DataFrame):
     u = u.dropna(subset=["name"]).copy()
     u["label"] = u["code"].astype(str) + " " + u["name"].astype(str)
@@ -724,7 +737,7 @@ def page_profile():
                     f"（风格：{score['style']}）", unsafe_allow_html=True)
         c1, c2 = st.columns([1, 1])
         with c1:
-            st.plotly_chart(charts.radar_chart(score["breakdown"]), width="stretch")
+            _plot(charts.radar_chart(score["breakdown"]), width="stretch")
         with c2:
             st.markdown("**分维度评分明细**")
             pdf = pd.DataFrame([{"维度": k, "权重": f"{d['weight']*100:.0f}%",
@@ -737,21 +750,21 @@ def page_profile():
         rr = ind.rolling_return(prices, win)
         rv = ind.rolling_volatility(prices, win)
         pts = ind.rolling_risk_return_points(prices, win, step=max(5, win // 3))
-        st.plotly_chart(charts.rolling_line(rr, f"滚动{win}日收益(%)",
+        _plot(charts.rolling_line(rr, f"滚动{win}日收益(%)",
                                             _cur_colors()["primary"]), width="stretch")
-        st.plotly_chart(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
+        _plot(charts.rolling_line(rv, f"滚动{win}日年化波动(%)",
                                             _cur_colors()["accent"], fill=True), width="stretch")
-        st.plotly_chart(charts.risk_return_scatter(pts), width="stretch")
+        _plot(charts.risk_return_scatter(pts), width="stretch")
         st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
                    "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
 
     with tabs[1]:  # 走势与回撤
         if fkey == "otc":
-            st.plotly_chart(charts.price_line({name: prices}, "净值走势", normalize=False),
+            _plot(charts.price_line({name: prices}, "净值走势", normalize=False),
                             width="stretch")
         else:
-            st.plotly_chart(charts.candlestick(hist, name), width="stretch")
-        st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
+            _plot(charts.candlestick(hist, name), width="stretch")
+        _plot(charts.drawdown_chart(prices), width="stretch")
 
         st.markdown("#### 相对基准走势")
         bench_name, matched = data.resolve_benchmark(name)
@@ -760,7 +773,7 @@ def page_profile():
         prices.index = pd.to_datetime(prices.index)
         bm_p.index = pd.to_datetime(bm_p.index)
         bench_label = bench_name if matched else f"{bench_name}（市场参照）"
-        st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], bench_label: bm_p},
+        _plot(charts.price_line({"基金": prices[-len(bm_p):], bench_label: bm_p},
                                           f"基金 vs {bench_label}（归一化）"), width="stretch")
 
     with tabs[2]:  # AI 预测
@@ -812,13 +825,13 @@ def page_profile():
             if best.get("importance"):
                 st.markdown("#### 特征重要性 Top8（模型可解释性）")
                 imp = best["importance"]
-                st.plotly_chart(charts.bar_compare(
+                _plot(charts.bar_compare(
                     {k: round(v, 3) for k, v in imp.items()}, "特征重要性"), width="stretch")
 
             calib = c_calibration(code, fkey, name, start, end)
             if calib:
                 st.markdown("#### 概率校准曲线")
-                st.plotly_chart(charts.reliability_diagram(calib), width="stretch")
+                _plot(charts.reliability_diagram(calib), width="stretch")
                 st.caption("校准曲线检验 LightGBM 输出概率的可靠性：点落在对角线上方表示模型低估、"
                            "下方表示高估；点大小代表该分桶的样本量；n<2 的桶不展示。")
             else:
@@ -889,13 +902,13 @@ def page_profile():
                 st.markdown(f"前十大合计占净值 **{lt.get('concentration', 0):.1f}%**")
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.plotly_chart(charts.pie_chart(lt["industry"].to_dict(), "行业分布（占前十）"),
+                    _plot(charts.pie_chart(lt["industry"].to_dict(), "行业分布（占前十）"),
                                     width="stretch")
                 with c2:
-                    st.plotly_chart(charts.pie_chart(lt["size"].to_dict(), "规模风格（大盘/中盘/小盘）"),
+                    _plot(charts.pie_chart(lt["size"].to_dict(), "规模风格（大盘/中盘/小盘）"),
                                     width="stretch")
                 with c3:
-                    st.plotly_chart(charts.pie_chart(lt["value"].to_dict(), "估值风格（价值/平衡/成长）"),
+                    _plot(charts.pie_chart(lt["value"].to_dict(), "估值风格（价值/平衡/成长）"),
                                     width="stretch")
                 st.caption("行业按重仓股申万一级行业归集；规模风格按总市值（亿）分档（≥800大盘/≥200中盘/其余小盘）；"
                            "估值风格按市盈率（动态）分档（≤20价值/≥40成长/中间平衡），亏损股归入成长。")
@@ -935,9 +948,9 @@ def page_profile():
             if sel and ic_frame is not None and not ic_frame.empty:
                 ic_sel = ic_frame[[c for c in sel if c in ic_frame.columns]]
                 cum_sel = cum_ic[[c for c in sel if c in cum_ic.columns]]
-                st.plotly_chart(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch",
+                _plot(charts.factor_ic_chart(ic_sel, "滚动 IC 时序"), width="stretch",
                                 key="prof_fac_ic_roll")
-                st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
+                _plot(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
                                 width="stretch", key="prof_fac_ic_cum")
 
             fdecay = res.get("fdecay")
@@ -946,7 +959,7 @@ def page_profile():
                 if not decay_sel.empty:
                     st.markdown("---")
                     st.markdown("#### 因子衰减（多展望期 IC）")
-                    st.plotly_chart(charts.factor_decay_chart(decay_sel),
+                    _plot(charts.factor_decay_chart(decay_sel),
                                     width="stretch", key="prof_fac_decay")
                     st.caption("同一因子在不同展望期（5/10/20/60/120 交易日）下的 IC 变化，"
                                "揭示因子预测力的兑现速度：短展望 IC 高、长展望 IC 衰减代表信号偏短期。")
@@ -959,7 +972,7 @@ def page_profile():
                     st.markdown("#### 因子分位数分组收益（单调性）")
                     qkey = st.selectbox("选择因子", valid_q, key="prof_fac_qtl")
                     if qkey in fqtl:
-                        st.plotly_chart(charts.quantile_returns_bar(fqtl[qkey], f"{qkey} 分位数未来收益"),
+                        _plot(charts.quantile_returns_bar(fqtl[qkey], f"{qkey} 分位数未来收益"),
                                         width="stretch", key="prof_fac_qtl_bar")
                         st.caption("按因子值升序分 5 组（Q1 最低 → Q5 最高），柱为各组未来 20 日收益均值；"
                                    "柱高随分位单调变化说明因子对收益有稳定的分层/预测能力。")
@@ -978,7 +991,7 @@ def page_profile():
             if fwarn:
                 for a, b, v in fwarn:
                     st.warning(f"高相关因子对：**{a}** ↔ **{b}**（ρ={v}），可能存在冗余")
-            st.plotly_chart(charts.corr_heatmap(fcorr, title="因子间 Spearman 相关系数"),
+            _plot(charts.corr_heatmap(fcorr, title="因子间 Spearman 相关系数"),
                             width="stretch", key="prof_fac_corr")
 
 
@@ -1009,7 +1022,7 @@ def page_screener():
                    height=480)
         st.markdown("#### 收益对比 TOP10")
         top10 = scored.head(10)
-        st.plotly_chart(charts.bar_compare(
+        _plot(charts.bar_compare(
             dict(zip(top10["name"].astype(str), top10["y1"].fillna(0))), "近1年收益 TOP10 (%)"),
             width="stretch")
     else:
@@ -1123,19 +1136,19 @@ def page_compare():
     full_table(pd.DataFrame(rows))
 
     # 净值与回撤改为整行堆叠展示，避免并排时图例/时间轴拥挤
-    st.plotly_chart(charts.price_line(prices_map, "归一化净值对比"), width="stretch")
-    st.plotly_chart(charts.drawdown_compare(prices_map, "回撤对比"), width="stretch")
+    _plot(charts.price_line(prices_map, "归一化净值对比"), width="stretch")
+    _plot(charts.drawdown_compare(prices_map, "回撤对比"), width="stretch")
 
     st.markdown("#### 四维评分雷达对比")
     breakdowns = {nm: scoring.composite_score(metrics_map[nm], st.session_state.style)["breakdown"]
                   for nm in names}
-    st.plotly_chart(charts.radar_overlay(breakdowns), width="stretch")
+    _plot(charts.radar_overlay(breakdowns), width="stretch")
 
     st.markdown("#### 综合评分排名")
     rank_df = pd.DataFrame([{"基金": nm, "综合评分": score_map[nm], "评级": rating_map[nm]}
                             for nm in names]).sort_values("综合评分", ascending=False)
     full_table(rank_df)
-    st.plotly_chart(charts.bar_compare({nm: score_map[nm] for nm in rank_df["基金"]},
+    _plot(charts.bar_compare({nm: score_map[nm] for nm in rank_df["基金"]},
                                        "综合评分对比（百分制）"), width="stretch")
     best = rank_df.iloc[0]["基金"]
     st.success(f"在当前风格「{st.session_state.style}」下，综合评分最高：**{best}**"
@@ -1305,7 +1318,7 @@ def page_portfolio():
     st.markdown("#### 最优权重")
     c1, c2 = st.columns([1, 1])
     with c1:
-        st.plotly_chart(charts.pie_chart(opt["weights"]), width="stretch")
+        _plot(charts.pie_chart(opt["weights"]), width="stretch")
     with c2:
         st.markdown("**组合绩效指标**")
         render_metrics_row(opt["stats"], [
@@ -1318,13 +1331,13 @@ def page_portfolio():
         full_table(wdf)
 
     if opt.get("frontier") is not None and len(opt["frontier"]):
-        st.plotly_chart(charts.frontier_chart(opt["frontier"], opt["stats"]),
+        _plot(charts.frontier_chart(opt["frontier"], opt["stats"]),
                         width="stretch")
 
     st.markdown("#### 风险结构与相关性")
     rc_df = pf.risk_contribution(opt["raw_weights"], ret)
-    st.plotly_chart(charts.risk_contribution_bar(rc_df), width="stretch")
-    st.plotly_chart(charts.corr_heatmap(ret.corr()), width="stretch")
+    _plot(charts.risk_contribution_bar(rc_df), width="stretch")
+    _plot(charts.corr_heatmap(ret.corr()), width="stretch")
     st.caption("风险贡献占比合计 100%；占比显著高于权重的资产为组合主要风险来源，"
                "相关性接近 1 的成分无法通过分散化降低风险。")
 
@@ -1341,7 +1354,7 @@ def page_portfolio():
 
     st.markdown("#### 组合回测净值")
     nav = pf.composite_nav(opt["weights"], prices_dict)
-    st.plotly_chart(charts.price_line({"组合": nav}, "组合净值（起点=1）", normalize=False),
+    _plot(charts.price_line({"组合": nav}, "组合净值（起点=1）", normalize=False),
                     width="stretch")
 
     # ---- 优化方法横向回测对比（滚动样本外） ----
@@ -1369,7 +1382,7 @@ def page_portfolio():
             st.markdown("**样本外绩效对比**（年化收益/回撤/波动/VaR/CVaR 单位：%）")
             full_table(summary)
             navs = {k: v["nav"] for k, v in wf.items()}
-            st.plotly_chart(charts.price_line(navs, "各优化方法样本外净值（起点=1）",
+            _plot(charts.price_line(navs, "各优化方法样本外净值（起点=1）",
                                              normalize=False), width="stretch")
             best = summary.iloc[0]["方法"]
             st.success(f"样本外表现最优（按夏普比率）：**{best}**")
@@ -1437,12 +1450,12 @@ def page_allocation():
                                            "stats": stats, "summary_df": summary_df}
 
     st.markdown("#### 各类资产历史走势（归一化 = 1）")
-    st.plotly_chart(charts.price_line(prices_dict, "大类资产归一化走势"), width="stretch")
+    _plot(charts.price_line(prices_dict, "大类资产归一化走势"), width="stretch")
 
     st.markdown("#### 目标配置权重")
     w1, w2 = st.columns([1, 1])
     with w1:
-        st.plotly_chart(charts.pie_chart(weights), width="stretch")
+        _plot(charts.pie_chart(weights), width="stretch")
     with w2:
         st.markdown("**配置绩效（全样本）**")
         render_metrics_row(stats, [
@@ -1475,7 +1488,7 @@ def page_allocation():
             st.warning("历史数据不足以进行再平衡回测（需超过观察窗口+再平衡周期）。")
         else:
             navs = {k: v["nav"] for k, v in rb.items()}
-            st.plotly_chart(charts.price_line(navs, "再平衡 vs 买入持有（起点=1）", normalize=False),
+            _plot(charts.price_line(navs, "再平衡 vs 买入持有（起点=1）", normalize=False),
                             width="stretch")
             rb_df = pd.DataFrame([{"策略": k, **v["stats"]} for k, v in rb.items()])
             st.session_state["alloc_rb"] = rb_df
@@ -1557,7 +1570,7 @@ def page_dca():
         ("最大回撤", "最大回撤%"), ("定投期数", "定投期数"),
     ])
 
-    st.plotly_chart(charts.smile_chart(res["微笑曲线"]), width="stretch")
+    _plot(charts.smile_chart(res["微笑曲线"]), width="stretch")
 
     c1, c2 = st.columns([1, 1])
     with c1:
@@ -1658,10 +1671,10 @@ def page_backtest():
 
     navs = {r["name"]: r["nav"] for r in results.values() if len(r["nav"]) > 1}
     st.markdown("#### 各策略净值走势（起点 = 1）")
-    st.plotly_chart(charts.price_line(navs, "各策略净值对比", normalize=False), width="stretch")
+    _plot(charts.price_line(navs, "各策略净值对比", normalize=False), width="stretch")
 
     st.markdown("#### 各策略回撤对比")
-    st.plotly_chart(charts.drawdown_compare(navs), width="stretch")
+    _plot(charts.drawdown_compare(navs), width="stretch")
 
     best_sharpe = summary.dropna(subset=["夏普比率"])
     if not best_sharpe.empty:
@@ -1741,9 +1754,9 @@ def page_stress(preset_mode=None):
     ]).rename(columns={"修复周期(交易日)": "修复周期"})
     full_table(sdf)
 
-    st.plotly_chart(charts.stress_bar(res), width="stretch")
+    _plot(charts.stress_bar(res), width="stretch")
     if navs and any(len(v) > 1 for v in navs.values()):
-        st.plotly_chart(charts.stress_drawdown_overlay(navs), width="stretch")
+        _plot(charts.stress_drawdown_overlay(navs), width="stretch")
     else:
         st.info("暂无足够数据绘制回撤路径曲线")
     st.markdown("#### 结论")
