@@ -169,9 +169,129 @@ def _holdings_table(holdings) -> str:
     return f"<table><tr>{head}</tr>{''.join(body)}</table>"
 
 
+def _lookthrough_section(lookthrough: dict) -> str:
+    """持仓穿透章节：前十大重仓的行业/规模/估值风格暴露 + 集中度。"""
+    if not lookthrough or float(lookthrough.get("concentration", 0) or 0) <= 0:
+        return "<p>暂无持仓穿透数据（该基金可能为指数/债基或未披露前十大重仓）。</p>"
+    conc = float(lookthrough.get("concentration", 0.0))
+
+    def _bar(s: pd.Series, top: int) -> str:
+        if s is None or s.empty:
+            return "<p>—</p>"
+        items = "".join(f"<tr><td>{k}</td><td>{v:.1f}%</td></tr>"
+                        for k, v in s.head(top).items())
+        return f"<table><tr><th>分类</th><th>占比</th></tr>{items}</table>"
+
+    ind_part = lookthrough.get("industry")
+    size_part = lookthrough.get("size")
+    value_part = lookthrough.get("value")
+    return (
+        f"<p>前十大重仓合计占净值 <strong>{conc:.1f}%</strong>，其底层结构穿透如下。</p>"
+        f"<p><strong>行业分布（前6）：</strong></p>{_bar(ind_part, 6)}"
+        f"<p><strong>规模风格（大盘/中盘/小盘）：</strong></p>{_bar(size_part, 4)}"
+        f"<p><strong>估值风格（价值/平衡/成长）：</strong></p>{_bar(value_part, 3)}"
+    )
+
+
+def _factors_section(factors) -> str:
+    """因子有效性诊断章节：有效/预警/下线计数 + 最强有效因子 + 明细表。"""
+    if factors is None or len(factors) == 0:
+        return "<p>暂无因子诊断数据。</p>"
+    df = factors
+    state = df["状态"].value_counts()
+    valid = df[df["状态"] == "有效"]
+    top = ""
+    if not valid.empty:
+        t = valid.sort_values("IC", key=lambda s: s.abs(), ascending=False).iloc[0]
+        top = (f"最强有效因子为 <strong>{t['因子']}</strong>"
+               f"（|IC|={abs(t['IC']):.3f}，{t['方向']}）。")
+    cnt = "、".join(f"{k} {v} 个" for k, v in state.items()) or "无"
+    head = "".join(f"<th>{c}</th>" for c in ["因子", "类别", "IC", "IR", "状态"])
+    rows = []
+    for _, r in df.iterrows():
+        ic = "—" if pd.isna(r["IC"]) else f"{r['IC']:.3f}"
+        ir = "—" if pd.isna(r["IR"]) else f"{r['IR']:.3f}"
+        rows.append(f"<tr><td>{r['因子']}</td><td>{r['类别']}</td>"
+                    f"<td>{ic}</td><td>{ir}</td><td>{r['状态']}</td></tr>")
+    table = f"<table><tr>{head}</tr>{''.join(rows)}</table>"
+    return (f"<p>因子自动校验（滚动 IC 失效占比）：{cnt}。{top}"
+            f"「已下线」因子已从预测特征中剔除。</p>{table}")
+
+
+def _strategies_section(summary) -> str:
+    """策略回测对比章节：五套策略统一指标表 + 夏普最优结论。"""
+    if summary is None or summary.empty:
+        return "<p>暂无策略回测数据。</p>"
+    df = summary.copy()
+    pct_cols = {"总收益", "年化收益", "年化波动", "最大回撤"}
+    head = "".join(f"<th>{c}</th>" for c in df.columns)
+    rows = []
+    for _, r in df.iterrows():
+        cells = []
+        for c in df.columns:
+            v = r[c]
+            if isinstance(v, (int, float)) and not pd.isna(v):
+                cells.append(f"<td>{v*100:.1f}%</td>" if c in pct_cols
+                             else f"<td>{v:.2f}</td>")
+            else:
+                cells.append("<td>—</td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    table = f"<table><tr>{head}</tr>{''.join(rows)}</table>"
+    sh = df[df["夏普比率"].notna()]
+    concl = ""
+    if not sh.empty:
+        b = sh.loc[sh["夏普比率"].idxmax()]
+        concl = (f"<p>五套策略横向对比（择时类已计入单边手续费+滑点）："
+                 f"夏普比率最高为 <strong>{b['策略']}</strong>"
+                 f"（夏普 {b['夏普比率']:.2f}、年化 {b['年化收益']*100:.1f}%、"
+                 f"最大回撤 {b['最大回撤']*100:.1f}%）。"
+                 f"择时/定投策略的换手成本已扣除，与买入持有裸收益不可直接比较。</p>")
+    return table + concl
+
+
+def _dca_section(dca: dict) -> str:
+    """定投测算章节：核心结论 + 时点优选 + 三止盈策略对比。"""
+    if not dca or not dca.get("backtest"):
+        return "<p>暂无定投测算数据（样本不足）。</p>"
+    b = dca["backtest"]
+    freq = b.get("freq", "月")
+    amt = b.get("每期金额", 1000)
+    start = dca.get("start", "")
+    irr = b.get("定投IRR")
+    irr_txt = f"{irr:.1f}%" if isinstance(irr, (int, float)) else "—"
+    concl = (f"<p>按<b>每{freq}定额 {amt:g} 元</b>定投{f'（{start} 起）' if start else ''}："
+             f"累计投入 <strong>{b['总投入']:,.0f} 元</strong>、"
+             f"期末资产 <strong>{b['期末资产']:,.0f} 元</strong>，"
+             f"累计收益率 <strong>{b['收益率']}%</strong>、"
+             f"年化 IRR <strong>{irr_txt}</strong>、"
+             f"期间最大回撤 <strong>{b['最大回撤']}%</strong>"
+             f"（共定投 {b['定投期数']} 期）。</p>")
+
+    timing_txt = ""
+    timing = dca.get("timing") or {}
+    if timing:
+        vp = timing.get("估值分位")
+        vp_txt = f"{vp:.0f}%" if isinstance(vp, (int, float)) else "—"
+        timing_txt = (f"<p>时点优选：当前估值分位 <strong>{vp_txt}</strong> → "
+                      f"<strong>{timing.get('建议', '')}</strong>。</p>")
+
+    stop_txt = ""
+    sdf = (dca.get("stop") or {}).get("止盈对比")
+    if sdf is not None and not sdf.empty:
+        head = "".join(f"<th>{c}</th>" for c in ["策略", "参数", "期末资产", "模拟收益率"])
+        rows = "".join(f"<tr><td>{r['策略']}</td><td>{r['参数']}</td>"
+                       f"<td>{r['期末资产']:,.0f}</td><td>{r['模拟收益率']:.1f}%</td></tr>"
+                       for _, r in sdf.iterrows())
+        stop_txt = (f"<p>三种止盈策略模拟对比（止盈后清仓不再定投）：</p>"
+                    f"<table><tr>{head}</tr>{rows}</table>")
+    return concl + timing_txt + stop_txt
+
+
 def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
                            advice: dict, forecasts: dict = None, holdings=None,
-                           stress: dict = None, dark: bool = False) -> str:
+                           stress: dict = None, strategies=None, dca: dict = None,
+                           lookthrough: dict = None, factors=None,
+                           dark: bool = False) -> str:
     score_rows = "".join(
         f"<tr><td>{k}</td><td>{d['weight']*100:.0f}%</td>"
         f"<td>{d['score']:.1f}</td><td>{'; '.join(d['reasons'])}</td></tr>"
@@ -194,19 +314,27 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 </table>
 <h2>二、重仓股（前十）</h2>
 {_holdings_table(holdings)}
-<h2>三、综合评分</h2>
+<h2>三、持仓结构与风格</h2>
+{_lookthrough_section(lookthrough)}
+<h2>四、综合评分</h2>
 <p style="font-size:18px; font-weight:600; color:{score_color}; margin:6px 0;">综合评分 {score['total']} · {score['rating']}</p>
-<h2>四、四维度评分明细</h2>
+<h2>五、四维度评分明细</h2>
 <table><tr><th>维度</th><th>权重</th><th>得分</th><th>打分依据</th></tr>{score_rows}</table>
-<h2>五、核心指标</h2>
+<h2>六、核心指标</h2>
 {metrics_markdown_html(metrics)}
-<h2>六、AI 多周期预测</h2>
+<h2>七、AI 多周期预测</h2>
 <table><tr><th>周期</th><th>上涨概率</th><th>下跌概率</th><th>置信度</th><th>预期收益</th><th>收益区间(10%~90%)</th></tr>{_forecast_rows(forecasts)}</table>
-<h2>七、压力测试情景</h2>
+<h2>八、因子有效性诊断</h2>
+{_factors_section(factors)}
+<h2>九、压力测试情景</h2>
 <table><tr><th>情景</th><th>最大回撤</th><th>缩水幅度</th><th>年化波动率</th><th>修复周期</th><th>说明</th></tr>{_stress_rows(stress)}</table>
-<h2>八、落地操作建议</h2>
+<h2>十、策略回测对比</h2>
+{_strategies_section(strategies)}
+<h2>十一、定投测算</h2>
+{_dca_section(dca)}
+<h2>十二、落地操作建议</h2>
 <table><tr><th>项目</th><th>内容</th></tr>{advice_rows}</table>
-<h2>九、合规声明</h2>
+<h2>十三、合规声明</h2>
 <div class="warn">{config.RISK_DISCLAIMER}</div>
 {_HTML_FOOT}"""
     return html
@@ -266,9 +394,34 @@ def build_compare_report_html(names: list, metrics_map: dict, score_map: dict,
 <table><tr><th>维度</th>{''.join(f'<th>{nm}</th>' for nm in names)}</tr>{''.join(radar_rows)}</table>
 """
 
+    def _v(nm, key):
+        v = metrics_map[nm].get(key)
+        return v if isinstance(v, (int, float)) else None
+
+    def _arg(nms, key, mm):
+        vs = [(nm, _v(nm, key)) for nm in nms if _v(nm, key) is not None]
+        return (max if mm == "max" else min)(vs, key=lambda x: x[1]) if vs else None
+
+    concl = [f"<p>在当前投资风格下，综合评分最高：<strong>{best}</strong>"
+             f"（{rating_map[best]}，{score_map[best]:.1f} 分）。</p>"]
+    r = _arg(names, "年化收益", "max")
+    if r:
+        concl.append(f"<p>收益维度：<strong>{r[0]}</strong> 年化收益最高（{r[1]:.2f}%）。</p>")
+    md = _arg(names, "最大回撤", "max")
+    mx = _arg(names, "最大回撤", "min")
+    if md and mx and md[0] != mx[0]:
+        concl.append(f"<p>风险维度：<strong>{md[0]}</strong> 回撤控制最好（最大回撤 {md[1]:.2f}%），"
+                     f"<strong>{mx[0]}</strong> 回撤最深（{mx[1]:.2f}%）。</p>")
+    v = _arg(names, "年化波动率", "min")
+    if v:
+        concl.append(f"<p><strong>{v[0]}</strong> 年化波动最低（{v[1]:.2f}%），持有体验更平稳。</p>")
+    sh = _arg(names, "夏普比率", "max")
+    if sh:
+        concl.append(f"<p>风险调整后收益：<strong>{sh[0]}</strong> 夏普比率最高（{sh[1]:.2f}）。</p>")
+
     body += f"""
 <h2>结论</h2>
-<p>在当前投资风格下，综合评分最高：<strong>{best}</strong>（{rating_map[best]}，{score_map[best]:.1f} 分）。</p>
+{''.join(concl)}
 """
     return _HTML_HEAD.format(title="基金横向对比报告") + body + _HTML_FOOT
 
