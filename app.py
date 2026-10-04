@@ -298,6 +298,28 @@ def c_calibration(code, fkey, name, start, end):
                                           ff=ff)
 
 
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner=False, max_entries=64)
+def c_dca_result(code, fkey, name, start, end):
+    """一键报告用定投测算：月度定额 1000 元、固定模式，返回打包结果。
+
+    拉取 2015 年以来的长历史，按 start/end 切入定投区间（报告默认最近 5 年），
+    与定投页默认口径一致；pe_hist 用于「时点优选」与「估值高位止盈」。
+    """
+    hist = data.get_fund_hist(code, fkey, "20150101", end)
+    if hist is None or hist.empty:
+        return None
+    prices = ind.to_price_series(hist)
+    pe_hist = data.get_fund_pe_history(code, name)
+    b = dca.dca_backtest(prices, start=start, end=end, freq="月", amount=1000,
+                         mode="固定", initial_amount=0, pe_hist=pe_hist)
+    if not b:
+        return None
+    sp = dca.dca_stop_profit_backtest(prices, start=start, end=end, freq="月",
+                                      amount=1000, pe_hist=pe_hist)
+    tm = dca.dca_timing_advice(prices, pe_hist=pe_hist)
+    return {"backtest": b, "stop": sp, "timing": tm, "start": start}
+
+
 def default_start():
     return (_dt.date.today() - _dt.timedelta(days=3 * 365)).strftime("%Y%m%d")
 
@@ -1643,17 +1665,27 @@ def page_report():
                                               stress=stress_res, score=score)
     mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
     holdings = c_holdings(code)
+    lookthrough = c_lookthrough(code)
+    factors = res["fval"]
+    pe_hist = c_fund_pe(code, name)
+    _, strat_summary = backtest.compare_strategies(prices, pe_hist=pe_hist)
+    dca_start = (_dt.date.today() - _dt.timedelta(days=5 * 365)).strftime("%Y%m%d")
+    dca_res = c_dca_result(code, fkey, name, dca_start, default_end())
 
     if format_ == "HTML":
         html = report.build_fund_report_html(name, code, metrics, score, advice,
                                              forecasts=mc, holdings=holdings,
-                                             stress=stress_res)
+                                             stress=stress_res, strategies=strat_summary,
+                                             dca=dca_res, lookthrough=lookthrough,
+                                             factors=factors)
         st.download_button("下载 HTML 报告", data=html, file_name=f"{code}_report.html",
                            mime="text/html")
         # 内联预览按当前主题深色化；下载版保持浅色，便于打印
         preview = report.build_fund_report_html(name, code, metrics, score, advice,
                                                 forecasts=mc, holdings=holdings,
-                                                stress=stress_res,
+                                                stress=stress_res, strategies=strat_summary,
+                                                dca=dca_res, lookthrough=lookthrough,
+                                                factors=factors,
                                                 dark=st.session_state.dark_mode)
         st.markdown(preview, unsafe_allow_html=True)
     else:
