@@ -503,7 +503,9 @@ def get_stock_industry_index(force: bool = False) -> pd.DataFrame:
     if parts:
         out = pd.concat(parts, ignore_index=True)
         out = out.drop_duplicates(subset=["code"], keep="first").reset_index(drop=True)
-        _save_cache(key, out)
+        # 覆盖股票数达到阈值才落盘，避免残缺索引（超时/限流导致的部分结果）被永久缓存
+        if len(out) >= config.INDUSTRY_INDEX_MIN_ROWS:
+            _save_cache(key, out)
     return out
 
 
