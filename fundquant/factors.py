@@ -298,10 +298,13 @@ def factor_ic(factor: pd.Series, forward_ret: pd.Series) -> float:
 
 def factor_ir(ic_series: pd.Series) -> float:
     ic_series = ic_series.dropna()
-    if len(ic_series) == 0 or ic_series.std(ddof=1) in (0, np.nan):
+    if len(ic_series) < 2:
+        return 0.0
+    std = float(ic_series.std(ddof=1))
+    if not np.isfinite(std) or std == 0:
         return 0.0
     with np.errstate(all="ignore"):
-        return float(ic_series.mean() / ic_series.std(ddof=1))
+        return float(ic_series.mean() / std)
 
 
 def factor_win_rate(factor: pd.Series, forward_ret: pd.Series, top_q: float = 0.7) -> float:
