@@ -267,6 +267,8 @@ def c_analysis(code, fkey, name, start, end):
         "trend": predict.trend_signals(prices),
         "pred": predict.forecast(prices, hist, horizon=20, pe_hist=pe_hist, ff=ff),
         "ic_ts": ic_ts, "cum_ic": cum_ic, "fcorr": fcorr, "fwarn": fwarn,
+        "fdecay": fac.factor_decay(prices, hist, pe_hist=pe_hist, ff=ff),
+        "fqtl": fac.factor_quantile_returns(prices, hist, forward=20, pe_hist=pe_hist, ff=ff),
     }
 
 
@@ -296,6 +298,18 @@ def c_calibration(code, fkey, name, start, end):
     ff = fac.compute_factor_frame(prices, hist, pe_hist)
     return predict.calibration_curve_data(prices, hist, pe_hist, horizon=20, n_bins=10,
                                           ff=ff)
+
+
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在做过拟合诊断...", max_entries=64)
+def c_overfit(code, fkey, name, start, end):
+    """过拟合诊断（样本内外对比 + 子样本稳健性 + 置换检验），缓存加速。"""
+    hist = data.get_fund_hist(code, fkey, start, end)
+    if hist is None or hist.empty:
+        return {}
+    prices = ind.to_price_series(hist)
+    pe_hist = data.get_fund_pe_history(code, name)
+    ff = fac.compute_factor_frame(prices, hist, pe_hist)
+    return predict.overfit_report(prices, hist, horizon=20, pe_hist=pe_hist, ff=ff)
 
 
 @st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner=False, max_entries=64)
@@ -728,6 +742,7 @@ def page_profile():
             st.markdown(f"#### {name} 多周期涨跌概率")
             rows = []
             for h, r in mc.items():
+                bss = r.get("brier_skill")
                 rows.append({
                     "预测周期": f"{h} 日",
                     "上涨概率": f"{r['prob_up']*100:.1f}%",
@@ -735,6 +750,7 @@ def page_profile():
                     "预期收益区间": f"{r['return_range'][0]:.1f}% ~ {r['return_range'][1]:.1f}%",
                     "置信度": f"{r['confidence']*100:.0f}%",
                     "AUC": r["auc"],
+                    "BSS": "" if bss is None else f"{bss:.2f}",
                     "方法": r["method"],
                 })
             full_table(pd.DataFrame(rows))
@@ -780,6 +796,39 @@ def page_profile():
                            "下方表示高估；点大小代表该分桶的样本量；n<2 的桶不展示。")
             else:
                 st.info("样本外数据不足，无法绘制概率校准曲线（需要 ≥60 条训练样本且 ≥10 条 OOS 校验样本）。")
+
+            ofit = c_overfit(code, fkey, name, start, end)
+            if ofit:
+                st.markdown("#### 过拟合诊断")
+                o1, o2, o3, o4 = st.columns(4)
+                o1.metric("样本内 AUC", ofit["is_auc"])
+                o2.metric("样本外 AUC", ofit["oos_auc"])
+                o3.metric("IS − OOS 差距", ofit["gap"])
+                pv = ofit["perm_p"]
+                o4.metric("置换检验 p 值", "--" if pv is None else pv)
+                s1, s2 = st.columns(2)
+                sf, ss_ = ofit["sub_first"], ofit["sub_second"]
+                s1.metric("OOS 前半段 AUC", "--" if sf is None else sf)
+                s2.metric("OOS 后半段 AUC", "--" if ss_ is None else ss_)
+
+                gap = ofit["gap"]
+                if gap > 0.15:
+                    st.warning("样本内 AUC 显著高于样本外，模型存在过拟合倾向，预测结论需谨慎。")
+                elif gap > 0.05:
+                    st.info("样本内外 AUC 差距适中，模型泛化能力一般。")
+                else:
+                    st.success("样本内外 AUC 接近，模型未见明显过拟合。")
+                if pv is not None:
+                    if pv <= 0.05:
+                        st.success(f"置换检验 p={pv:.3f} ≤ 0.05，样本外表现显著优于打乱标签的随机基线，"
+                                   f"表明捕捉到真实信号而非噪声。")
+                    else:
+                        st.warning(f"置换检验 p={pv:.3f} > 0.05，样本外表现未显著优于随机基线，"
+                                   f"需警惕纯噪声拟合。")
+                st.caption(f"置换检验共 {ofit['n_perm']} 次重标号重训（训练样本 {ofit['n_train']} 条、"
+                           f"holdout 样本 {ofit['n_holdout']} 条），训练窗已做时序 purging 避免标签泄漏。")
+            else:
+                st.info("样本不足，无法进行过拟合诊断（需 ≥10 条样本外校验样本）。")
         else:
             st.warning("AI 预测数据不足，请确保基金有足够的行情数据。")
 
@@ -847,6 +896,31 @@ def page_profile():
                                 key="prof_fac_ic_roll")
                 st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
                                 width="stretch", key="prof_fac_ic_cum")
+
+            fdecay = res.get("fdecay")
+            if sel and fdecay is not None and not fdecay.empty:
+                decay_sel = fdecay[[c for c in sel if c in fdecay.columns]]
+                if not decay_sel.empty:
+                    st.markdown("---")
+                    st.markdown("#### 因子衰减（多展望期 IC）")
+                    st.plotly_chart(charts.factor_decay_chart(decay_sel),
+                                    width="stretch", key="prof_fac_decay")
+                    st.caption("同一因子在不同展望期（5/10/20/60/120 交易日）下的 IC 变化，"
+                               "揭示因子预测力的兑现速度：短展望 IC 高、长展望 IC 衰减代表信号偏短期。")
+
+            fqtl = res.get("fqtl")
+            if fqtl:
+                valid_q = [k for k, v in fqtl.items() if v]
+                if valid_q:
+                    st.markdown("---")
+                    st.markdown("#### 因子分位数分组收益（单调性）")
+                    qkey = st.selectbox("选择因子", valid_q, key="prof_fac_qtl")
+                    if qkey in fqtl:
+                        st.plotly_chart(charts.quantile_returns_bar(fqtl[qkey], f"{qkey} 分位数未来收益"),
+                                        width="stretch", key="prof_fac_qtl_bar")
+                        st.caption("按因子值升序分 5 组（Q1 最低 → Q5 最高），柱为各组未来 20 日收益均值；"
+                                   "柱高随分位单调变化说明因子对收益有稳定的分层/预测能力。")
+
         st.markdown("---")
         st.caption("因子有效性基于月度滚动 IC 自动判定：近 12 个月里 |IC|<0.02 的失效月份"
                    "占比 ≥40% 预警、≥60% 自动下线（样本不足月不判定，短历史不轻易下线）。"
@@ -1209,6 +1283,17 @@ def page_portfolio():
     st.plotly_chart(charts.corr_heatmap(ret.corr()), width="stretch")
     st.caption("风险贡献占比合计 100%；占比显著高于权重的资产为组合主要风险来源，"
                "相关性接近 1 的成分无法通过分散化降低风险。")
+
+    ddattr = pf.drawdown_attribution(opt["weights"], prices_dict)
+    if ddattr:
+        st.markdown("#### 最大回撤归因")
+        st.markdown(f"回撤区间 **{str(ddattr['start'])[:10]} → {str(ddattr['end'])[:10]}**，"
+                    f"最大回撤 **{ddattr['mdd']}%**")
+        ddrows = pd.DataFrame([{"资产": k, "回撤贡献(%)": v}
+                               for k, v in ddattr["contributions"].items()])
+        full_table(ddrows)
+        st.caption("回撤贡献 = 峰值时该资产权重 × 资产区间跌幅（负值表示拖累组合回撤），"
+                   "数值越负说明该资产是这一轮回撤的主要来源。")
 
     st.markdown("#### 组合回测净值")
     nav = pf.composite_nav(opt["weights"], prices_dict)
