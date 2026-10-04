@@ -269,9 +269,9 @@ def c_fund_pe(code, name):
     return data.get_fund_pe_history(code, name)
 
 
-@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在计算指标与AI预测...", max_entries=64)
+@st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在计算指标与模型预测...", max_entries=64)
 def c_analysis(code, fkey, name, start, end):
-    """基金深度分析的重计算（指标/因子校验/AI预测），按基金+区间缓存，加速刷新。"""
+    """基金深度分析的重计算（指标/因子校验/模型预测），按基金+区间缓存，加速刷新。"""
     hist = data.get_fund_hist(code, fkey, start, end)
     if hist is None or hist.empty:
         return None
@@ -283,7 +283,7 @@ def c_analysis(code, fkey, name, start, end):
     metrics = ind.compute_fund_metrics(hist, pe_hist=pe_hist)
     if not metrics:
         return None
-    # 因子矩阵只算一次，供 IC 时序/相关性/因子校验/AI 预测复用，消除重复滚动计算
+    # 因子矩阵只算一次，供 IC 时序/相关性/因子校验/模型预测复用，消除重复滚动计算
     ff = fac.compute_factor_frame(prices, hist, pe_hist)
     ic_ts, cum_ic = fac.ic_time_series(prices, hist, pe_hist=pe_hist, ff=ff)
     fcorr = fac.factor_correlation_matrix(prices, hist, pe_hist=pe_hist, ff=ff)
@@ -301,7 +301,7 @@ def c_analysis(code, fkey, name, start, end):
 
 @st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在训练多周期预测模型...", max_entries=64)
 def c_forecast(code, fkey, name, start, end):
-    """AI 走势预测的多周期 LightGBM（4 档），缓存加速。"""
+    """模型走势预测的多周期 LightGBM（4 档），缓存加速。"""
     hist = data.get_fund_hist(code, fkey, start, end)
     if hist is None or hist.empty:
         return None, None
@@ -681,7 +681,7 @@ def page_dashboard():
         _show_list(bot, "跌幅前10")
 
 
-# ==================== 页面 2：基金画像（融合深分 + AI 预测 + 因子诊断，Tabs 布局） ====================
+# ==================== 页面 2：基金画像（融合深分 + 模型预测 + 因子诊断，Tabs 布局） ====================
 def page_profile():
     st.header("基金画像")
     code, name, fkey = cur_fund()
@@ -708,12 +708,12 @@ def page_profile():
     metrics["估值状态"] = ind.valuation_status(_vp / 100) if _vp is not None else "数据不足"
     score = scoring.composite_score(metrics, st.session_state.style)
 
-    tab_names = ["概览", "走势与回撤", "AI 预测", "估值与穿透", "因子诊断"]
+    tab_names = ["概览", "走势与回撤", "模型预测", "估值与穿透", "因子诊断"]
     # 用分段选择器替代 st.tabs：仅渲染当前选中视图，未选中视图的图表与计算不执行，
     # 显著降低切页 / 拖动滚动窗口等交互时的全量重绘开销。
     tab = st.segmented_control(
         "视图", tab_names, default="概览", key="prof_tab",
-        label_visibility="collapsed")
+        label_visibility="collapsed", width="stretch")
 
     if tab == "概览":  # 概览
         if fkey == "otc":
@@ -780,7 +780,7 @@ def page_profile():
         _plot(charts.price_line({"基金": prices[-len(bm_p):], bench_label: bm_p},
                                           f"基金 vs {bench_label}（归一化）"), width="stretch")
 
-    elif tab == "AI 预测":  # AI 预测
+    elif tab == "模型预测":  # 模型预测
         mc, _ = c_forecast(code, fkey, name, start, end)
         if mc:
             st.markdown(f"#### {name} 多周期涨跌概率")
@@ -874,7 +874,7 @@ def page_profile():
             else:
                 st.info("样本不足，无法进行过拟合诊断（需 ≥10 条样本外校验样本）。")
         else:
-            st.warning("AI 预测数据不足，请确保基金有足够的行情数据。")
+            st.warning("模型预测数据不足，请确保基金有足够的行情数据。")
 
     elif tab == "估值与穿透":  # 估值与穿透
         st.markdown("#### 估值偏离监控")
@@ -926,6 +926,9 @@ def page_profile():
     elif tab == "因子诊断":  # 因子诊断
         st.markdown("#### 因子有效性校验（自动淘汰机制）")
         full_table(fval)
+        st.caption("状态判定规则：近 12 个月滚动 |IC| 的失效月占比 ≥40% 记「预警」、≥60% 记「已下线」"
+                   "（样本不足月不判定，短历史不轻易下线）。t 值 = 月度 IC 均值 ÷ 标准差 × √月数，"
+                   "|t| 越大代表 IC 方向越稳定；「有效」仅代表 |IC| 强度达标，因子正负方向由模型学习符号。")
 
         # ---- 因子漂移持久化监控：本次状态落盘为时序快照，追溯预警/下线历史 ----
         if fval is not None and not fval.empty:
@@ -980,12 +983,6 @@ def page_profile():
                                         width="stretch", key="prof_fac_qtl_bar")
                         st.caption("按因子值升序分 5 组（Q1 最低 → Q5 最高），柱为各组未来 20 日收益均值；"
                                    "柱高随分位单调变化说明因子对收益有稳定的分层/预测能力。")
-
-        st.markdown("---")
-        st.caption("因子有效性基于月度滚动 IC 自动判定：近 12 个月里 |IC|<0.02 的失效月份"
-                   "占比 ≥40% 预警、≥60% 自动下线（样本不足月不判定，短历史不轻易下线）。"
-                   "t值 = 月度 IC 均值 ÷ 标准差 × √月数，|t| 越大代表 IC 方向越稳定；"
-                   "「有效」仅代表 |IC| 强度达标，因子方向以其自身定义为准、由模型学习符号。")
 
         fcorr = res.get("fcorr")
         fwarn = res.get("fwarn")
@@ -1799,7 +1796,7 @@ def page_stress(preset_mode=None):
 # ==================== 页面 11：一键报告 ====================
 def page_report():
     st.header("一键量化分析报告")
-    st.caption("汇集基金核心指标、AI 预测与持仓穿透，支持 HTML 导出")
+    st.caption("汇集基金核心指标、模型预测与持仓穿透，支持 HTML 导出")
     with st.expander("参数快照（可复现）"):
         full_table(pd.DataFrame([{"参数": k, "取值": str(v)}
                                  for k, v in config.build_snapshot().items()]))
@@ -1843,7 +1840,7 @@ def page_report():
     else:
         st.markdown(f"### {name}（{code}）量化分析摘要")
         st.markdown(f"**综合评分 {score['total']}（{score['rating']}，风格 {score['style']}）**")
-        st.markdown("#### AI 多周期预测")
+        st.markdown("#### 模型多周期预测")
         if mc:
             fdf = pd.DataFrame([
                 {"周期": f"{h}日", "上涨概率": f"{f['prob_up']*100:.0f}%",

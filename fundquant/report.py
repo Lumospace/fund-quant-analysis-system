@@ -251,7 +251,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 <table><tr><th>维度</th><th>权重</th><th>得分</th><th>打分依据</th></tr>{score_rows}</table>
 <h2>六、核心指标</h2>
 {metrics_markdown_html(metrics)}
-<h2>七、AI 多周期预测</h2>
+<h2>七、模型多周期预测</h2>
 <table><tr><th>周期</th><th>上涨概率</th><th>下跌概率</th><th>置信度</th><th>预期收益</th><th>收益区间(10%~90%)</th></tr>{_forecast_rows(forecasts)}</table>
 <h2>八、因子有效性诊断</h2>
 {_factors_section(factors)}
