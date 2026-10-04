@@ -105,6 +105,17 @@ def inject_css():
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong {{
         color: #ffffff !important;
     }}
+    /* 侧栏说明文字（数据源、深色模式、数据更新时间等 caption）：浅灰蓝，深底可读 */
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] span {{
+        color: #dbe6f3 !important;
+    }}
+    /* 侧栏折叠面板标题（"★ 收藏夹"等 expander summary）：亮字 */
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary span {{
+        color: #ffffff !important;
+    }}
     /* 指标卡片 */
     .metric-card {{background:{C['card_bg']}; border-radius:10px; padding:12px 14px;
         box-shadow:0 1px 4px rgba(30,58,95,.08); border:1px solid {C['card_border']};}}
