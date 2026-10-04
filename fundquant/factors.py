@@ -303,7 +303,9 @@ def factor_ir(ic_series: pd.Series) -> float:
     if len(ic_series) < 2:
         return 0.0
     std = float(ic_series.std(ddof=1))
-    if not np.isfinite(std) or std == 0:
+    # 常量序列的样本 std 因浮点舍入可能为 1e-17 级而非精确 0，必须用容差判定，
+    # 否则 mean/std 会放大为无意义的巨型 IR（进而污染 t 值）。
+    if not np.isfinite(std) or std < 1e-12:
         return 0.0
     with np.errstate(all="ignore"):
         return float(ic_series.mean() / std)
@@ -338,7 +340,10 @@ def factor_monotonicity(factor: pd.Series, forward_ret: pd.Series, n_group: int 
     mean_ret = pd.Series(fr.values).groupby(grp).mean()
     if len(mean_ret) < 3:
         return np.nan
-    return _spearman(pd.Series(range(len(mean_ret))), mean_ret)
+    # 分组数恒等于 n_group（默认 5，远小于 IC 的 20 样本门槛），
+    # 不能用 _spearman（其 <20 样本即返回 NaN），否则单调性恒为 NaN。
+    with np.errstate(all="ignore"):
+        return float(stats.spearmanr(np.arange(len(mean_ret)), mean_ret.values).statistic)
 
 
 def validate_factors(prices: pd.Series, hist: pd.DataFrame,
