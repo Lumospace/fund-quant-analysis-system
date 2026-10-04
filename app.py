@@ -28,6 +28,32 @@ def _cur_colors():
     return config.get_colors(st.session_state.dark_mode)
 
 
+def _require_date_order(start, end, label="开始日期"):
+    """校验起止日期顺序：start 须早于 end，否则告警并返回 False（调用方 return）。"""
+    if start >= end:
+        st.warning(f"{label}需早于结束日期。")
+        return False
+    return True
+
+
+def _advance_gate(submitted, done_key, tip):
+    """提交后置 done 标记；尚未提交则提示并返回 False（调用方 return）。"""
+    if submitted:
+        st.session_state[done_key] = True
+    if not st.session_state.get(done_key, False):
+        st.info(tip)
+        return False
+    return True
+
+
+def _ranked(df, cols, rename_map):
+    """插入「排名」列 → 按 cols 取列 → 重命名为中文，供榜单统一展示。"""
+    out = df.copy()
+    out.insert(0, "排名", range(1, len(out) + 1))
+    cols = [c for c in cols if c in out.columns]
+    return out[["排名"] + cols].rename(columns=rename_map)
+
+
 # ==================== 样式 ====================
 def inject_css():
     C = _cur_colors()
@@ -527,17 +553,15 @@ def page_dashboard():
 
     # 实时榜单（按涨跌幅，带排名1-10）
     st.markdown("#### 涨跌幅 TOP 榜")
-    top = qfiltered.dropna(subset=["pct_chg"]).sort_values("pct_chg", ascending=False).head(10).copy()
-    bot = qfiltered.dropna(subset=["pct_chg"]).sort_values("pct_chg").head(10).copy()
-    top.insert(0, "排名", range(1, len(top) + 1))
-    bot.insert(0, "排名", range(1, len(bot) + 1))
+    top = qfiltered.dropna(subset=["pct_chg"]).sort_values("pct_chg", ascending=False).head(10)
+    bot = qfiltered.dropna(subset=["pct_chg"]).sort_values("pct_chg").head(10)
+
+    _RENAME = {"code": "代码", "name": "名称", "price": "最新价/估算值", "pct_chg": "涨跌幅%", "sector": "板块"}
 
     def _show_list(df_, title):
         st.markdown(f"**{title}**")
-        show = df_[["排名", "code", "name", "price", "pct_chg", "sector"]].rename(columns={
-            "code": "代码", "name": "名称", "price": "最新价/估算值", "pct_chg": "涨跌幅%",
-            "sector": "板块"})
-        st.dataframe(show, width="stretch", hide_index=True)
+        st.dataframe(_ranked(df_, ["code", "name", "price", "pct_chg", "sector"], _RENAME),
+                     width="stretch", hide_index=True)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -791,12 +815,12 @@ def page_screener():
             return
         scored = scoring.score_universe(rank)
         st.markdown(f"共 {len(scored)} 只场外基金，按综合评分排序（现仅基于收益维度；风险评估需进入单基金详查）")
-        show = scored[scored["综合评分"] >= min_score].copy()
-        cols = [c for c in ["code", "name", "m1", "m3", "m6", "y1", "ytd", "综合评分", "评级"] if c in show.columns]
-        show.insert(0, "排名", range(1, len(show) + 1))
-        st.dataframe(show[["排名"] + cols].rename(columns={
-            "code": "代码", "name": "简称", "m1": "近1月%", "m3": "近3月%",
-            "m6": "近6月%", "y1": "近1年%", "ytd": "今年来%"}), width="stretch", hide_index=True)
+        show = scored[scored["综合评分"] >= min_score]
+        st.dataframe(_ranked(show,
+                             ["code", "name", "m1", "m3", "m6", "y1", "ytd", "综合评分", "评级"],
+                             {"code": "代码", "name": "简称", "m1": "近1月%", "m3": "近3月%",
+                              "m6": "近6月%", "y1": "近1年%", "ytd": "今年来%"}),
+                     width="stretch", hide_index=True)
         st.markdown("#### 收益对比 TOP10")
         top10 = scored.head(10)
         st.plotly_chart(charts.bar_compare(
@@ -819,14 +843,14 @@ def page_screener():
             if c in f.columns:
                 f[c] = pd.to_numeric(f[c], errors="coerce")
         sort_key = {"涨跌幅%": "pct_chg", "成交额": "amount", "流通市值": "流通市值"}[sort_by]
-        f = f.sort_values(sort_key, ascending=False).head(50).copy()
-        f.insert(0, "排名", range(1, len(f) + 1))
-        cols = [c for c in ["code", "name", "price", "pct_chg", "amount", "流通市值", "sector"] if c in f.columns]
+        f = f.sort_values(sort_key, ascending=False).head(50)
         st.markdown(f"共 {len(f)} 只场内ETF 实时行情（按 {sort_by} 排序前50），"
                     f"详细指标请进入「基金画像」查看。")
-        st.dataframe(f[["排名"] + cols].rename(columns={
-            "code": "代码", "name": "名称", "price": "最新价", "pct_chg": "涨跌幅%",
-            "amount": "成交额", "sector": "板块"}), width="stretch", hide_index=True)
+        st.dataframe(_ranked(f,
+                             ["code", "name", "price", "pct_chg", "amount", "流通市值", "sector"],
+                             {"code": "代码", "name": "名称", "price": "最新价", "pct_chg": "涨跌幅%",
+                              "amount": "成交额", "sector": "板块"}),
+                     width="stretch", hide_index=True)
 
 
 # ==================== 页面 5：基金对比 ====================
@@ -855,17 +879,13 @@ def page_compare():
                                      min_value=start_date, max_value=_dt.date.today())
         submitted = st.form_submit_button("开始对比", type="primary", use_container_width=True)
 
-    if submitted:
-        st.session_state["cmp_done"] = True
-    if not st.session_state.get("cmp_done", False):
-        st.info("选择对比基金并设置日期后，点击「开始对比」。")
+    if not _advance_gate(submitted, "cmp_done", "选择对比基金并设置日期后，点击「开始对比」。"):
         return
 
     if len(picks) < 2:
         st.warning("请至少选择 2 只基金进行对比。")
         return
-    if start_date >= end_date:
-        st.warning("开始时间需早于结束时间")
+    if not _require_date_order(start_date, end_date, "开始时间"):
         return
     start, end = start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")
 
@@ -1035,19 +1055,15 @@ def page_portfolio():
                                                  on_change=_invalidate_pf))
             budget = [p / 100.0 for p in budget_pct]
 
-    if st.button("开始优化", type="primary", use_container_width=True):
-        st.session_state["pf_done"] = True
-
-    if not st.session_state.get("pf_done", False):
-        st.info("选择成分基金并设置优化参数后，点击「开始优化」。")
+    if not _advance_gate(st.button("开始优化", type="primary", use_container_width=True),
+                         "pf_done", "选择成分基金并设置优化参数后，点击「开始优化」。"):
         return
 
     if len(picks) < 2:
         st.warning("请至少选择 2 只基金构建组合。")
         return
 
-    if start_d >= end_d:
-        st.warning("开始日期需早于结束日期。")
+    if not _require_date_order(start_d, end_d, "开始日期"):
         return
 
     # 逐资产边界前置校验：单只「最小」不得超过其「最大」（在全局/可行性校验之外）
@@ -1190,14 +1206,10 @@ def page_allocation():
 
         submitted = st.form_submit_button("开始配置", type="primary", use_container_width=True)
 
-    if submitted:
-        st.session_state["alloc_done"] = True
-    if not st.session_state.get("alloc_done", False):
-        st.info("设置好日期、配置方法与目标波动率后，点击「开始配置」。")
+    if not _advance_gate(submitted, "alloc_done", "设置好日期、配置方法与目标波动率后，点击「开始配置」。"):
         return
 
-    if start >= end:
-        st.warning("开始日期需早于结束日期")
+    if not _require_date_order(start, end, "开始日期"):
         return
     start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
 
@@ -1309,14 +1321,10 @@ def page_dca():
                                      min_value=start_date, max_value=_dt.date.today())
         submitted = st.form_submit_button("开始测算", type="primary", use_container_width=True)
 
-    if submitted:
-        st.session_state["dca_done"] = True
-    if not st.session_state.get("dca_done", False):
-        st.info("设置好定投参数后，点击「开始测算」。")
+    if not _advance_gate(submitted, "dca_done", "设置好定投参数后，点击「开始测算」。"):
         return
 
-    if start_date >= end_date:
-        st.warning("起投时间需早于结束时间")
+    if not _require_date_order(start_date, end_date, "起投时间"):
         return
     start = start_date.strftime("%Y%m%d")
     end = end_date.strftime("%Y%m%d")
@@ -1398,10 +1406,7 @@ def page_backtest():
             dca_amount = st.number_input("定投每期金额(元)", 100, 100000, 1000, 100)
         submitted = st.form_submit_button("开始回测", type="primary", use_container_width=True)
 
-    if submitted:
-        st.session_state["bt_done"] = True
-    if not st.session_state.get("bt_done", False):
-        st.info("设置好回测参数后，点击「开始回测」。")
+    if not _advance_gate(submitted, "bt_done", "设置好回测参数后，点击「开始回测」。"):
         return
 
     start, end = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
@@ -1515,10 +1520,7 @@ def page_stress(preset_mode=None):
                                                 round(100.0 / len(prices_dict), 2), 1.0,
                                                 key=f"stress_w_{i}", format="%.1f")
             submitted = st.form_submit_button("开始压力测试", type="primary", use_container_width=True)
-        if submitted:
-            st.session_state["stress_port_done"] = True
-        if not st.session_state.get("stress_port_done", False):
-            st.info("设置各基金比例后，点击「开始压力测试」。")
+        if not _advance_gate(submitted, "stress_port_done", "设置各基金比例后，点击「开始压力测试」。"):
             return
         total_w = sum(raw_w.values())
         weights = ({k: v / total_w for k, v in raw_w.items()} if total_w > 0
