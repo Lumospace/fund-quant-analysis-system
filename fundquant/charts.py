@@ -62,7 +62,7 @@ def candlestick(hist: pd.DataFrame, name: str = ""):
         x=h["date"], open=h["open"], high=h["high"], low=h["low"], close=h["close"],
         increasing_line_color=_pal()["up"], decreasing_line_color=_pal()["down"],
         name=name or "价格"))
-    fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.06),
+    fig.update_xaxes(rangeslider=dict(visible=False),
                      type="date")
     return _base(fig, f"{name} 近180日K线", height=430, showlegend=False)
 
@@ -76,7 +76,7 @@ def price_line(prices_dict: dict, title="净值走势对比", normalize=True):
             s = s / s.iloc[0]
         fig.add_trace(go.Scatter(x=s.index, y=s.values, mode="lines",
                                  name=name, line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=2)))
-    fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.06),
+    fig.update_xaxes(rangeslider=dict(visible=False),
                      type="date")
     return _base(fig, title, height=400)
 
