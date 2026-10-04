@@ -41,7 +41,7 @@ def _build_features(prices: pd.Series, hist: pd.DataFrame,
         feats["val_pct"] = -ff["valuation"]
     else:
         feats["val_pct"] = prices.rolling(252).apply(
-            lambda x: float((x <= x[-1]).mean()), raw=True)
+            lambda x: float((x < x[-1]).mean()), raw=True)
     # 去除全空列
     feats = feats.dropna(axis=1, how="all")
     return feats

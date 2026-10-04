@@ -78,7 +78,7 @@ class ValuationFactor(FactorDef):
     def compute(self, prices, hist, pe_hist=None):
         pct = ind.pe_percentile_aligned(prices, pe_hist)
         if pct.empty:
-            w = prices.rolling(252).apply(lambda x: float((x <= x[-1]).mean()), raw=True)
+            w = prices.rolling(252).apply(lambda x: float((x < x[-1]).mean()), raw=True)
             return -w  # 兜底：价格越接近一年低位因子值越高
         return -pct  # PE 分位越低（越便宜）因子值越高
 
