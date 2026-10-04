@@ -1887,15 +1887,11 @@ def main():
     inject_css()      # 基于最新 dark_mode 注入样式，避免主题滞后一次交互
     import fundquant.charts as _charts
     _charts.set_palette(st.session_state.dark_mode)
-    # 将整页渲染放进单元素占位容器：每次 rerun 先清空旧内容再绘制新页面，
-    # 避免切页时新页面尚未加载完毕、旧页面元素残留导致的"透视/叠影"。
-    main_area = st.empty()
-    with main_area:
-        try:
-            PAGES[page]()
-        except Exception as e:
-            st.error(f"页面运行时出错：{e}")
-            st.exception(e)
+    try:
+        PAGES[page]()
+    except Exception as e:
+        st.error(f"页面运行时出错：{e}")
+        st.exception(e)
 
 
 if __name__ == "__main__":
