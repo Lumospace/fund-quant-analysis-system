@@ -942,6 +942,7 @@ def page_profile():
 # ==================== 页面 4：基金筛选优选 ====================
 def page_screener():
     st.header("基金筛选优选")
+    st.warning(config.SURVIVOR_BIAS_NOTE)
     fkey = config.FUND_CLASS_KEY[st.session_state.fund_class]
 
     if fkey == "otc":
@@ -1530,6 +1531,7 @@ def page_dca():
 # ==================== 页面 9：策略回测对比 ====================
 def page_backtest():
     st.header("历史回测与策略对比")
+    st.warning(config.SURVIVOR_BIAS_NOTE)
     st.caption("双均线 / 动量 / 定投 / 买入持有 多策略横向对比，计入交易成本")
     code, name, fkey = cur_fund()
 
