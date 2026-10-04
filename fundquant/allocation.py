@@ -154,12 +154,15 @@ def allocation_summary(ret: pd.DataFrame, methods=None, target_vol: float = None
 
 
 def rebalance_backtest(ret: pd.DataFrame, method: str, target_vol: float = None,
-                       rebalance_days: int = 63, lookback: int = 252) -> dict:
+                       rebalance_days: int = 63, lookback: int = 252,
+                       cost_rate: float = config.COST_RATE) -> dict:
     """周期性再平衡回测（对比买入持有）。
 
     每 rebalance_days 个交易日，用截至当日的最近 lookback 个交易日收益重估目标
     权重并持有下一段；"买入持有"则用首个窗口的初始权重一直持有不动。两者样本外
     区间（首个训练窗结束后）对齐，返回各自的净值与绩效。
+    两者均扣除首期建仓成本；再平衡臂额外按 |Δ权重| × cost_rate 扣除每次换仓成本，
+    避免忽略再平衡换手成本高估其表现。
     """
     ret = ret.astype(float).dropna()
     n = ret.shape[1]
@@ -171,15 +174,25 @@ def rebalance_backtest(ret: pd.DataFrame, method: str, target_vol: float = None,
     port_rb = pd.Series(0.0, index=ret.index, dtype=float)
     port_bh = pd.Series(0.0, index=ret.index, dtype=float)
 
+    # 建仓成本：两臂首期均按满仓建仓扣一次（Σ|w|≈1 → cost_rate）
+    build_cost = float(np.abs(w_hodl).sum()) * cost_rate
+    rb_cost = pd.Series(0.0, index=ret.index, dtype=float)
+    bh_cost = pd.Series(0.0, index=ret.index, dtype=float)
+    rb_cost.iloc[lookback] += build_cost
+    bh_cost.iloc[lookback] += build_cost
+
     for t in range(lookback, ret.shape[0], rebalance_days):
         end = min(t + rebalance_days, ret.shape[0])
         port_rb.iloc[t:end] = ret.iloc[t:end].values @ w_cur
         port_bh.iloc[t:end] = ret.iloc[t:end].values @ w_hodl
         if end < ret.shape[0]:
-            w_cur = solve_weights(ret.iloc[end - lookback:end], method, target_vol)
+            w_new = solve_weights(ret.iloc[end - lookback:end], method, target_vol)
+            turnover = float(np.abs(w_new - w_cur).sum())
+            rb_cost.iloc[end] += turnover * cost_rate  # 换仓成本计入下一段首日
+            w_cur = w_new
 
-    oos_rb = port_rb.iloc[lookback:]
-    oos_bh = port_bh.iloc[lookback:]
+    oos_rb = (port_rb - rb_cost).iloc[lookback:]
+    oos_bh = (port_bh - bh_cost).iloc[lookback:]
     return {
         "再平衡": {"nav": (1 + oos_rb).cumprod(), "stats": pf._returns_stats(oos_rb)},
         "买入持有": {"nav": (1 + oos_bh).cumprod(), "stats": pf._returns_stats(oos_bh)},

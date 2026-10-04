@@ -195,6 +195,19 @@ def _risk_parity_weights(cov: np.ndarray, bounds, ineq_cons=None, budget=None) -
     return np.asarray(best_w, dtype=float)
 
 
+def _expected_returns(ret: pd.DataFrame) -> np.ndarray:
+    """期望收益估计（年化）：样本均值向截面均值做 James-Stein 收缩。
+
+    样本均值作为期望收益估计极不稳定（估计误差 >> 真实信号），直接喂给
+    均值-方差会产出对历史噪声过拟合的极端/突兀权重。将每个资产的样本均值
+    按 config.EXPECTED_RETURN_SHRINK 强度向截面均值收缩，量级更稳、
+    排序关系不变；风险平价/风险预算/最小方差只依赖协方差，不受本函数影响。
+    """
+    mu = ret.mean().values * config.TRADING_DAYS
+    mu_bar = float(np.mean(mu))
+    return mu_bar + (1.0 - config.EXPECTED_RETURN_SHRINK) * (mu - mu_bar)
+
+
 def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
                        target_return: float = None, max_weight: float = 1.0,
                        bounds=None, sector_limit=None, budget=None,
@@ -208,7 +221,7 @@ def optimize_portfolio(ret: pd.DataFrame, mode: str = "min_variance",
     budget: 风险预算模式下各资产目标风险贡献比例（长度=资产数，自动归一化；缺省等额）
     返回结果字典。
     """
-    mu = ret.mean().values * config.TRADING_DAYS
+    mu = _expected_returns(ret)
     cov = _robust_cov(ret).values * config.TRADING_DAYS
     names = list(ret.columns)
     n = len(names)
@@ -475,7 +488,7 @@ METHOD_LABELS = {
 def _solve_weights(ret: pd.DataFrame, mode: str, max_weight: float = 1.0,
                    sector_limit=None, target_return=None) -> np.ndarray:
     """给定训练期收益矩阵，求解固定权重向量（供滚动回测复用）。"""
-    mu = ret.mean().values * config.TRADING_DAYS
+    mu = _expected_returns(ret)
     cov = _robust_cov(ret).values * config.TRADING_DAYS
     names = list(ret.columns)
     n = len(names)
@@ -509,12 +522,14 @@ def _solve_weights(ret: pd.DataFrame, mode: str, max_weight: float = 1.0,
 def walk_forward_backtest(ret: pd.DataFrame, methods=None,
                           train_window: int = 126, step: int = 20,
                           max_weight: float = 1.0, sector_limit=None,
-                          target_return=None) -> dict:
+                          target_return=None, cost_rate: float = config.COST_RATE) -> dict:
     """滚动样本外回测：训练窗滚动推进，评估不同优化方法的样本外表现。
 
     每过一个 step 交易日，用窗口内最近 train_window 个交易日求权重，
     持有 step 个交易日；样本外区间从首个训练窗结束日起算，加权得到
     各方法的样本外日收益与净值。
+    换仓时按 |Δ权重| × cost_rate 扣除调仓成本（首期按满仓建仓扣一次），
+    避免忽略换手成本系统性高估样本外表现。
     返回 {中文方法名: {"nav": Series, "stats": dict}}，按夏普降序不可变。
     """
     ret = ret.astype(float).dropna()
@@ -526,12 +541,18 @@ def walk_forward_backtest(ret: pd.DataFrame, methods=None,
     out = {}
     for m in methods:
         port_ret = pd.Series(0.0, index=ret.index, dtype=float)
+        cost = pd.Series(0.0, index=ret.index, dtype=float)
+        w_prev = None
         for t in range(train_window, ret.shape[0], step):
             train = ret.iloc[t - train_window:t]
             w = _solve_weights(train, m, max_weight, sector_limit, target_return)
             end = min(t + step, ret.shape[0])
             port_ret.iloc[t:end] = ret.iloc[t:end].values @ w
-        oos = port_ret.iloc[train_window:]
+            # 首期按满仓建仓、其后按换仓幅度（|Δw|）计成本；权重归一化后 Σ|w|≈1
+            turnover = float(np.abs(w - w_prev).sum()) if w_prev is not None else float(np.abs(w).sum())
+            cost.iloc[t] = turnover * cost_rate
+            w_prev = w
+        oos = (port_ret - cost).iloc[train_window:]
         label = METHOD_LABELS.get(m, m)
         out[label] = {
             "nav": (1 + oos).cumprod(),
