@@ -388,6 +388,46 @@ def composite_nav(weights: dict, prices_dict: dict) -> pd.Series:
     return combo / combo.iloc[0]
 
 
+def drawdown_attribution(weights: dict, prices_dict: dict) -> dict:
+    """组合最大回撤归因：定位组合峰→谷区间，分解各资产对该段回撤的贡献。
+
+    组合净值按权重加权合成（口径同 composite_nav）。找出最大回撤的峰值/谷值日期，
+    用「峰值时该资产权重 × 资产区间跌幅」近似分解回撤（合计≈组合回撤），
+    识别拖累组合回撤的主要资产。返回 {start, end, mdd, contributions}，
+    成分不足或回撤区间无效时返回 {}。contributions 为 {资产: 贡献(负值表示拖累，%)}。
+    """
+    if not weights or not prices_dict:
+        return {}
+    df = pd.DataFrame()
+    for name, w in weights.items():
+        if name in prices_dict and w > 0:
+            s = pd.to_numeric(prices_dict[name], errors="coerce").dropna()
+            if len(s) > 1:
+                df[name] = s / s.iloc[0] * w
+    if df.shape[1] < 1 or df.shape[0] < 2:
+        return {}
+    combo = df.dropna().sum(axis=1)
+    combo = combo / combo.iloc[0]
+    dd = combo / combo.cummax() - 1
+    trough = dd.idxmin()
+    peak = combo.loc[:trough].idxmax()
+    if peak >= trough:
+        return {}
+    mdd = float(dd.loc[trough])
+    combo_peak = float(combo.loc[peak])
+    contribs = {}
+    for name in df.columns:
+        w_peak = float(df[name].loc[peak] / combo_peak) if combo_peak > 0 else 0.0
+        a_ret = float(df[name].loc[trough] / df[name].loc[peak] - 1)
+        contribs[name] = w_peak * a_ret * 100  # 负值=贡献回撤
+    return {
+        "start": peak, "end": trough,
+        "mdd": round(mdd * 100, 2),
+        "contributions": {k: round(v, 2) for k, v in
+                          sorted(contribs.items(), key=lambda x: x[1])},
+    }
+
+
 # ============ 尾部风险（蒙特卡洛 + 相关性） ============
 
 def _correlated_tail(ret: pd.DataFrame, weights: dict, alpha: float = 0.95,
