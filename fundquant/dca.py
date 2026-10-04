@@ -145,7 +145,7 @@ def dca_stop_profit_backtest(prices: pd.Series, start: str = None, end: str = No
                              pe_hist: pd.DataFrame = None) -> dict:
     """三种止盈策略模拟对比（目标收益 / 估值高位 / 回撤止盈）。
 
-    pe_hist: 真实 PE-TTM 历史，用于"估值高位"止盈；缺失时该策略退化为中性触发。
+    pe_hist: 真实 PE-TTM 历史，用于"估值高位"止盈；缺失时以净值历史分位代理估值。
     """
     s = pd.to_numeric(prices, errors="coerce").dropna()
     s.index = pd.to_datetime(s.index)
@@ -175,13 +175,20 @@ def dca_stop_profit_backtest(prices: pd.Series, start: str = None, end: str = No
             cost += amount
             mv = shares * price
             peak_value = max(peak_value, mv)
-            vp = val_pct.get(d, np.nan) if not val_pct.empty else np.nan
-            vp = 0.5 if pd.isna(vp) else vp
             trigger = False
             if strategy == "目标收益" and mv >= cost * (1 + target):
                 trigger = True
-            elif strategy == "估值高位" and vp > target:
-                trigger = True
+            elif strategy == "估值高位":
+                if not val_pct.empty:
+                    vp = val_pct.get(d, np.nan)
+                    vp = 0.5 if pd.isna(vp) else vp
+                    trigger = vp > target
+                else:
+                    # 无 PE 数据：以净值历史分位代理估值（扩张窗口、无前视）；
+                    # 样本不足时不判定，避免定投初期因短暂波动误触发。
+                    hist = s.loc[:d]
+                    if len(hist) >= 12:
+                        trigger = float((hist <= price).mean()) > target
             elif strategy == "回撤止盈" and mv < peak_value * (1 - target):
                 trigger = True
             if trigger:
@@ -195,6 +202,7 @@ def dca_stop_profit_backtest(prices: pd.Series, start: str = None, end: str = No
             "期末资产": round(final_mv, 2),
             "总投入": round(total_cost, 2),
             "模拟收益率": round((final_mv / total_cost - 1) * 100, 2) if total_cost else 0.0,
+            "状态": "已止盈" if sold else "未触发",
         }
 
     rows = [

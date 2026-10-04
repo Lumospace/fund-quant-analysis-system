@@ -210,9 +210,10 @@ def _dca_section(dca: dict) -> str:
     stop_txt = ""
     sdf = (dca.get("stop") or {}).get("止盈对比")
     if sdf is not None and not sdf.empty:
-        head = "".join(f"<th>{c}</th>" for c in ["策略", "参数", "期末资产", "模拟收益率"])
+        head = "".join(f"<th>{c}</th>" for c in ["策略", "参数", "期末资产", "模拟收益率", "状态"])
         rows = "".join(f"<tr><td>{r['策略']}</td><td>{r['参数']}</td>"
-                       f"<td>{r['期末资产']:,.0f}</td><td>{r['模拟收益率']:.1f}%</td></tr>"
+                       f"<td>{r['期末资产']:,.0f}</td><td>{r['模拟收益率']:.1f}%</td>"
+                       f"<td>{r.get('状态', '')}</td></tr>"
                        for _, r in sdf.iterrows())
         stop_txt = (f"<p>三种止盈策略模拟对比（止盈后清仓不再定投）：</p>"
                     f"<table><tr>{head}</tr>{rows}</table>")
