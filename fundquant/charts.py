@@ -7,20 +7,30 @@ from plotly.subplots import make_subplots
 
 import config
 
-C = config.COLORS
-_THEME = None  # 深色模式激活时指向 DARK_COLORS，否则为 None
+# 当前激活主题存于模块级可变容器，避免在函数内使用 global 关键字；
+# 图表函数经 _pal()/_is_dark() 显式读取统一配色，_base 仍支持显式传 colors 覆盖（便于测试/局部定制）。
+_STATE = {"palette": config.COLORS, "dark": False}
 
 
 def set_palette(dark: bool = False):
-    """切换全局调色板（浅色/深色），使所有图表函数与 _base 统一取色。"""
-    global C, _THEME
-    C = config.DARK_COLORS if dark else config.COLORS
-    _THEME = C if dark else None
+    """切换当前主题（浅色/深色），供图表函数统一取色。"""
+    _STATE["palette"] = config.DARK_COLORS if dark else config.COLORS
+    _STATE["dark"] = bool(dark)
+
+
+def _pal() -> dict:
+    """返回当前激活配色字典。"""
+    return _STATE["palette"]
+
+
+def _is_dark() -> bool:
+    """当前是否处于深色主题。"""
+    return _STATE["dark"]
 
 
 def _base(fig, title="", height=380, showlegend=None, colors=None):
-    pal = colors or C
-    is_dark = _THEME is not None or colors is not None
+    pal = colors or _pal()
+    is_dark = _is_dark() or colors is not None
     fig.update_layout(
         title=dict(text=title, x=0.0, xanchor="left",
                    font=dict(size=15, color=pal["primary"])),
@@ -50,7 +60,7 @@ def candlestick(hist: pd.DataFrame, name: str = ""):
     h = hist.tail(180)
     fig = go.Figure(go.Candlestick(
         x=h["date"], open=h["open"], high=h["high"], low=h["low"], close=h["close"],
-        increasing_line_color=C["up"], decreasing_line_color=C["down"],
+        increasing_line_color=_pal()["up"], decreasing_line_color=_pal()["down"],
         name=name or "价格"))
     fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.06),
                      type="date")
@@ -65,7 +75,7 @@ def price_line(prices_dict: dict, title="净值走势对比", normalize=True):
         if normalize:
             s = s / s.iloc[0]
         fig.add_trace(go.Scatter(x=s.index, y=s.values, mode="lines",
-                                 name=name, line=dict(color=C["series"][i % len(C["series"])], width=2)))
+                                 name=name, line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=2)))
     fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.06),
                      type="date")
     return _base(fig, title, height=400)
@@ -76,8 +86,8 @@ def drawdown_chart(prices_or_nav: pd.Series, title="回撤走势"):
     s = pd.to_numeric(prices_or_nav, errors="coerce").dropna()
     dd = (s / s.cummax() - 1) * 100
     fig = go.Figure(go.Scatter(x=dd.index, y=dd.values, fill="tozeroy",
-                               line=dict(color=C["down"], width=1.5), name="回撤"))
-    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
+                               line=dict(color=_pal()["down"], width=1.5), name="回撤"))
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
     fig.update_yaxes(title="回撤 (%)")
     return _base(fig, title, showlegend=False)
 
@@ -91,7 +101,7 @@ def radar_chart(metrics: dict, title="四维评分雷达"):
             vals.append(metrics[d]["score"])
     fig = go.Figure(go.Scatterpolar(
         r=vals + [vals[0]], theta=dims + [dims[0]], fill="toself",
-        line=dict(color=C["accent"]), name="评分"))
+        line=dict(color=_pal()["accent"]), name="评分"))
     fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100], visible=True)),
                       showlegend=False, height=320, margin=dict(l=50, r=50, t=40, b=40))
     return fig
@@ -110,7 +120,7 @@ def radar_overlay(funds: dict, title="多基金评分雷达对比"):
             continue
         fig.add_trace(go.Scatterpolar(
             r=vals + [vals[0]], theta=dims + [dims[0]], name=name,
-            line=dict(color=C["series"][i % len(C["series"])], width=2)))
+            line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=2)))
     fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100], visible=True)))
     fig = _base(fig, title, height=430)
     # 标题置顶；图例下移到底部，避免与标题重合，并预留足够底部边距
@@ -128,7 +138,7 @@ def pie_chart(weights: dict, title="组合权重分布"):
         labels=list(w.keys()), values=list(w.values()),
         hole=0.42, textinfo="percent", textposition="auto",
         hovertemplate="%{label}: %{percent}<extra></extra>",
-        marker=dict(colors=C["series"])))
+        marker=dict(colors=_pal()["series"])))
     fig = _base(fig, title, height=400, showlegend=True)
     fig.update_layout(
         legend=dict(orientation="h", yanchor="top", y=-0.15,
@@ -141,11 +151,11 @@ def smile_chart(smile: pd.DataFrame, title="定投微笑曲线"):
     """定投成本 vs 市值曲线。"""
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=smile.index, y=smile["累计投入"], name="累计投入",
-                             line=dict(color=C["primary"], width=2)))
+                             line=dict(color=_pal()["primary"], width=2)))
     fig.add_trace(go.Scatter(x=smile.index, y=smile["当前市值"], name="当前市值",
-                             line=dict(color=C["up"], width=2)))
+                             line=dict(color=_pal()["up"], width=2)))
     fig.add_trace(go.Scatter(x=smile.index, y=smile["盈亏"], name="盈亏",
-                             line=dict(color=C["accent"], width=1.5, dash="dot")))
+                             line=dict(color=_pal()["accent"], width=1.5, dash="dot")))
     fig.update_yaxes(title="金额（元）")
     return _base(fig, title)
 
@@ -155,7 +165,7 @@ def stress_bar(stress: dict, title="压力测试情景对比"):
     names = list(stress.keys())
     mdd = [stress[n].get("最大回撤") for n in names]
     mdd = [v if isinstance(v, (int, float)) else None for v in mdd]
-    fig = go.Figure(go.Bar(x=names, y=mdd, marker_color=C["down"],
+    fig = go.Figure(go.Bar(x=names, y=mdd, marker_color=_pal()["down"],
                            text=[f"{v}%" if v is not None else "N/A" for v in mdd],
                            textposition="outside", name="最大回撤"))
     fig.update_yaxes(title="最大回撤 (%)")
@@ -176,12 +186,12 @@ def stress_drawdown_overlay(navs: dict, title="各情景回撤路径叠加"):
         if len(nav) < 2:
             continue
         dd = (nav / nav.cummax() - 1) * 100
-        color = C["series"][i % len(C["series"])]
+        color = _pal()["series"][i % len(_pal()["series"])]
         fig.add_trace(go.Scatter(
             x=list(range(len(dd))), y=dd.values, mode="lines", name=name,
             line=dict(color=color, width=1.6),
             hovertemplate="交易日 %{x}<br>回撤 %{y:.2f}%<extra>" + name + "</extra>"))
-    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1, line_dash="dash")
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1, line_dash="dash")
     fig.update_xaxes(title="情景内交易日")
     fig.update_yaxes(title="回撤 (%)")
     fig.update_layout(hovermode="x unified")
@@ -194,7 +204,7 @@ def frontier_chart(frontier: pd.DataFrame, stats: dict = None, title="有效前�
     if frontier is not None and len(frontier):
         fig.add_trace(go.Scatter(x=frontier["vol"] * 100, y=frontier["ret"] * 100,
                                  mode="lines+markers", name="有效前沿",
-                                 line=dict(color=C["accent"], width=2)))
+                                 line=dict(color=_pal()["accent"], width=2)))
     fig.update_xaxes(title="年化波动率 (%)")
     fig.update_yaxes(title="年化收益 (%)")
     return _base(fig, title, showlegend=False)
@@ -203,7 +213,7 @@ def frontier_chart(frontier: pd.DataFrame, stats: dict = None, title="有效前�
 def bar_compare(data: dict, title="收益对比 (%)"):
     """横向对比条形图。"""
     fig = go.Figure(go.Bar(x=list(data.keys()), y=list(data.values()),
-                           marker_color=C["series"][:len(data)], textposition="outside"))
+                           marker_color=_pal()["series"][:len(data)], textposition="outside"))
     return _base(fig, title, showlegend=False)
 
 
@@ -216,8 +226,8 @@ def drawdown_compare(navs: dict, title="各策略回撤对比"):
             continue
         dd = (nav / nav.cummax() - 1) * 100
         fig.add_trace(go.Scatter(x=dd.index, y=dd.values, mode="lines", name=name,
-                                 line=dict(color=C["series"][i % len(C["series"])], width=1.6)))
-    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
+                                 line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=1.6)))
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
     fig.update_yaxes(title="回撤 (%)")
     return _base(fig, title, height=400)
 
@@ -226,11 +236,11 @@ def probability_gauge(prob_up: float, title="上涨概率"):
     """涨跌概率仪表盘。"""
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=prob_up * 100,
-        number=dict(suffix="%", font=dict(size=36, color=C["primary"])),
-        gauge=dict(axis=dict(range=[0, 100]), bar=dict(color=C["accent"]),
-                   steps=[dict(range=[0, 50], color=C["down_bg"]),
-                          dict(range=[50, 100], color=C["up_bg"])],
-                   threshold=dict(line=dict(color=C["down"], width=3), thickness=0.75, value=50)),
+        number=dict(suffix="%", font=dict(size=36, color=_pal()["primary"])),
+        gauge=dict(axis=dict(range=[0, 100]), bar=dict(color=_pal()["accent"]),
+                   steps=[dict(range=[0, 50], color=_pal()["down_bg"]),
+                          dict(range=[50, 100], color=_pal()["up_bg"])],
+                   threshold=dict(line=dict(color=_pal()["down"], width=3), thickness=0.75, value=50)),
         title=dict(text=title)))
     fig.update_layout(height=260, margin=dict(l=40, r=40, t=60, b=20))
     return fig
@@ -243,8 +253,8 @@ def corr_heatmap(corr: pd.DataFrame, title="成分相关性矩阵"):
     text = [[f"{v:.2f}" for v in row] for row in z]
     fig = go.Figure(go.Heatmap(
         z=z, x=labels, y=labels, zmin=-1, zmax=1,
-        colorscale=[[0.0, C["accent"]], [0.5, C["card_bg"]], [1.0, C["up"]]],
-        text=text, texttemplate="%{text}", textfont=dict(size=11, color=C["text"]),
+        colorscale=[[0.0, _pal()["accent"]], [0.5, _pal()["card_bg"]], [1.0, _pal()["up"]]],
+        text=text, texttemplate="%{text}", textfont=dict(size=11, color=_pal()["text"]),
         colorbar=dict(title="相关系数", thickness=14),
         hovertemplate="%{y} × %{x}: %{z:.2f}<extra></extra>"))
     fig.update_yaxes(autorange="reversed")
@@ -256,11 +266,11 @@ def risk_contribution_bar(rc_df: pd.DataFrame, title="风险贡献分解"):
     x = rc_df["资产"].tolist()
     fig = go.Figure()
     fig.add_trace(go.Bar(x=x, y=rc_df["权重"], name="权重 (%)",
-                         marker_color=C["accent"],
+                         marker_color=_pal()["accent"],
                          text=[f"{v:.1f}%" for v in rc_df["权重"]],
                          textposition="outside"))
     fig.add_trace(go.Bar(x=x, y=rc_df["风险贡献占比(%)"], name="风险贡献占比 (%)",
-                         marker_color=C["down"],
+                         marker_color=_pal()["down"],
                          text=[f"{v:.1f}%" for v in rc_df["风险贡献占比(%)"]],
                          textposition="outside"))
     fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.05)
@@ -270,7 +280,7 @@ def risk_contribution_bar(rc_df: pd.DataFrame, title="风险贡献分解"):
 
 def rolling_line(series: pd.Series, title="", color=None, fill=False):
     """单序列折线图（用于滚动收益 / 滚动波动等拆分展示，避免上下堆叠不协调）。"""
-    color = color or C["primary"]
+    color = color or _pal()["primary"]
     fig = go.Figure(go.Scatter(x=series.index, y=series.values, mode="lines",
                                name=title, line=dict(color=color, width=1.8),
                                fill="tozeroy" if fill else None))
@@ -286,16 +296,16 @@ def risk_return_scatter(points: pd.DataFrame, title="收益-风险散点"):
         x = points["年化波动"].values
         y = points["年化收益"].values
         fig.add_trace(go.Scatter(x=x[:-1], y=y[:-1], mode="markers", name="历史窗口",
-                                 marker=dict(color=C["neutral"], size=7, opacity=0.55),
+                                 marker=dict(color=_pal()["neutral"], size=7, opacity=0.55),
                                  hovertemplate="波动 %{x:.1f}% · 收益 %{y:.1f}%<extra></extra>"))
         fig.add_trace(go.Scatter(x=[x[-1]], y=[y[-1]], mode="markers+text", name="当前",
                                  text=["当前"], textposition="top center",
-                                 marker=dict(color=C["accent"], size=13,
+                                 marker=dict(color=_pal()["accent"], size=13,
                                              line=dict(width=2, color="#ffffff")),
                                  hovertemplate="波动 %{x:.1f}% · 收益 %{y:.1f}%<extra>当前</extra>"))
     fig.update_xaxes(title="年化波动率 (%)")
     fig.update_yaxes(title="年化收益 (%)")
-    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
     return _base(fig, title, height=380, showlegend=True)
 
 
@@ -305,8 +315,8 @@ def factor_ic_chart(frame: pd.DataFrame, title="", cumulative=False):
     for i, col in enumerate(frame.columns):
         s = frame[col]
         fig.add_trace(go.Scatter(x=s.index, y=s.values, mode="lines", name=col,
-                                 line=dict(color=C["series"][i % len(C["series"])], width=1.6)))
-    fig.add_hline(y=0, line_color=C["ref_line"], line_width=1)
+                                 line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=1.6)))
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
     fig.update_yaxes(title="累计 IC" if cumulative else "IC")
     return _base(fig, title=title, height=400)
 
@@ -324,20 +334,20 @@ def reliability_diagram(calib_data: dict, title="概率校准曲线 (Reliability
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
-                             line=dict(color=C["ref_line"], width=1.5, dash="dash"),
+                             line=dict(color=_pal()["ref_line"], width=1.5, dash="dash"),
                              name="完美校准 (对角线)", showlegend=True))
     fig.add_trace(go.Scatter(x=pred_means, y=actual_freqs,
                              mode="markers+text",
-                             marker=dict(size=sizes, color=C["accent"],
+                             marker=dict(size=sizes, color=_pal()["accent"],
                                          line=dict(color="#1f2937", width=1)),
                              text=[f"n={c}" for c in counts],
                              textposition="top center",
-                             textfont=dict(size=10, color=C["neutral"]),
+                             textfont=dict(size=10, color=_pal()["neutral"]),
                              name="实际观测", showlegend=False))
     fig.update_xaxes(title="预测概率", range=[-0.05, 1.05], dtick=0.1)
     fig.update_yaxes(title="实际发生频率", range=[-0.05, 1.05], dtick=0.1)
     fig.add_annotation(x=0.95, y=0.05, text="高估", showarrow=False,
-                       font=dict(size=12, color=C["text_secondary"]))
+                       font=dict(size=12, color=_pal()["text_secondary"]))
     fig.add_annotation(x=0.05, y=0.95, text="低估", showarrow=False,
-                       font=dict(size=12, color=C["text_secondary"]))
+                       font=dict(size=12, color=_pal()["text_secondary"]))
     return _base(fig, title, height=400, showlegend=True)
