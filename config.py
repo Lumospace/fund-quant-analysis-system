@@ -14,6 +14,7 @@ RISK_FREE_RATE = 0.02          # 无风险利率（年化，近似一年期国�
 TRADING_DAYS = 252             # 年交易日数
 COST_RATE = 0.00025            # 单边交易成本（万2.5，覆盖申赎费+滑点），组合/再平衡回测换仓时扣除
 EXPECTED_RETURN_SHRINK = 0.5   # 期望收益 James-Stein 收缩强度（0=不收缩,1=完全收缩到截面均值）
+PERMUTATION_TEST_ITERS = 10    # 过拟合置换检验的重标号重训次数（越大越稳但越慢）
 CACHE_TTL = {
     "spot": 300,           # 实时行情/基金列表 — 5 分钟
     "short": 1200,         # 校准曲线等轻量计算 — 20 分钟

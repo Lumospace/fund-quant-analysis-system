@@ -496,3 +496,63 @@ def high_correlation_warning(corr: pd.DataFrame, threshold: float = 0.8) -> list
                 pairs.append((names[i], names[j], round(v, 3)))
     pairs.sort(key=lambda x: abs(x[2]), reverse=True)
     return pairs
+
+
+def factor_decay(prices: pd.Series, hist: pd.DataFrame,
+                 horizons=(5, 10, 20, 60, 120),
+                 pe_hist: pd.DataFrame = None, ff: pd.DataFrame = None) -> pd.DataFrame:
+    """因子衰减分析：不同展望期（forward 交易日）下的 IC 对比。
+
+    IC 随展望期变化揭示因子的预测力兑现速度：短展望 IC 高、长展望 IC 衰减代表
+    信号偏短期；IC 随展望期上升则代表偏中长期逻辑。返回 DataFrame，index=展望期，
+    columns=因子中文名，值为全样本 Spearman IC。
+    """
+    if ff is None:
+        ff = compute_factor_frame(prices, hist, pe_hist)
+    name_map = {k: f.name for k, f in FACTORS.items()}
+    rows = []
+    for h in horizons:
+        fwd = prices.pct_change(h).shift(-h)
+        row = {"展望期": h}
+        for key in FACTORS.keys():
+            row[key] = factor_ic(ff[key], fwd)
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return pd.DataFrame()
+    df = df.set_index("展望期")
+    df.columns = [name_map.get(c, c) for c in df.columns]
+    return df
+
+
+def factor_quantile_returns(prices: pd.Series, hist: pd.DataFrame,
+                            forward: int = 20, n_group: int = 5,
+                            pe_hist: pd.DataFrame = None,
+                            ff: pd.DataFrame = None) -> dict:
+    """因子分位数（分组）收益：按因子值分 n_group 组，算各组未来 forward 日收益均值。
+
+    用于检验因子单调性（最低组到最高组收益是否单调递增/递减），比单一 IC 更直观。
+    返回 {因子中文名: {"Q1": 收益, ..., "Qn": 收益}}，样本不足的因子值为 None。
+    """
+    if ff is None:
+        ff = compute_factor_frame(prices, hist, pe_hist)
+    fwd = prices.pct_change(forward).shift(-forward)
+    name_map = {k: f.name for k, f in FACTORS.items()}
+    out = {}
+    for key in FACTORS.keys():
+        f = ff[key]
+        m = f.notna() & fwd.notna()
+        if int(m.sum()) < n_group * 8:
+            out[name_map[key]] = None
+            continue
+        fv = f[m].rank(method="first").to_numpy()
+        frv = fwd[m].to_numpy()
+        try:
+            grp = pd.qcut(fv, n_group, labels=False, duplicates="drop")
+        except ValueError:
+            out[name_map[key]] = None
+            continue
+        mean_ret = pd.Series(frv).groupby(grp).mean()
+        out[name_map[key]] = {f"Q{int(g) + 1}": round(float(v), 4)
+                              for g, v in mean_ret.items()}
+    return out

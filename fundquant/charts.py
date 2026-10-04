@@ -348,3 +348,29 @@ def reliability_diagram(calib_data: dict, title="概率校准曲线 (Reliability
     fig.add_annotation(x=0.05, y=0.95, text="低估", showarrow=False,
                        font=dict(size=12, color=_pal()["text_secondary"]))
     return _base(fig, title, height=400, showlegend=True)
+
+
+def factor_decay_chart(decay_df: pd.DataFrame, title="因子衰减（不同展望期 IC）"):
+    """因子 IC 随展望期变化的多序列折线：识别因子的预测力兑现速度。"""
+    fig = go.Figure()
+    for i, col in enumerate(decay_df.columns):
+        fig.add_trace(go.Scatter(
+            x=decay_df.index, y=decay_df[col].values, mode="lines+markers", name=col,
+            line=dict(color=_pal()["series"][i % len(_pal()["series"])], width=1.8),
+            marker=dict(size=6)))
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
+    fig.update_xaxes(title="展望期（交易日）", type="category")
+    fig.update_yaxes(title="IC")
+    return _base(fig, title=title, height=380)
+
+
+def quantile_returns_bar(qmap: dict, title="分位数分组收益"):
+    """单因子分位数分组收益条形图：红涨绿跌，检验因子收益单调性。"""
+    labels = list(qmap.keys())
+    vals = [qmap[k] * 100 for k in labels]
+    colors = [_pal()["up"] if v >= 0 else _pal()["down"] for v in vals]
+    fig = go.Figure(go.Bar(x=labels, y=vals, marker_color=colors, name="未来收益",
+                           text=[f"{v:.2f}%" for v in vals], textposition="outside"))
+    fig.update_yaxes(title="未来收益均值 (%)")
+    fig.add_hline(y=0, line_color=_pal()["ref_line"], line_width=1)
+    return _base(fig, title=title, height=360, showlegend=False)

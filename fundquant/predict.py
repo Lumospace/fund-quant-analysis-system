@@ -161,6 +161,11 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
                 auc_oos = float(roc_auc_score(y[mask], oos_probs[mask]))
             brier_oos = float(brier_score_loss(y[mask], oos_probs[mask]))
 
+        # Brier Skill Score：相对常数基线(基准涨率)的校准提升，1=完美、0=无改进、<0=差于基线
+        base_rate = float(y[mask].mean()) if n_test > 2 else np.nan
+        brier_skill = float(1.0 - brier_oos / (base_rate * (1 - base_rate))) \
+            if n_test > 2 and 0 < base_rate < 1 else 0.0
+
         # 最终模型：复用 walk-forward 最后一个可见窗口（截至 last_train_end），预测最新一行
         model = _fit_model(X.iloc[:last_train_end], y.iloc[:last_train_end])
         raw_prob = float(model.predict_proba(X.iloc[-1:])[0][1])
@@ -191,6 +196,7 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
             "expected_return": round(exp_ret, 2),
             "return_range": (round(lo, 2), round(hi, 2)),
             "confidence": confidence, "auc": round(auc_oos, 3),
+            "brier_skill": round(brier_skill, 3),
             "importance": imp, "n_train": min_train, "n_test": n_test,
             "method": "LightGBM walk-forward 时序分类",
         }
@@ -312,3 +318,82 @@ def calibration_curve_data(prices: pd.Series, hist: pd.DataFrame,
             "count": cnt,
         }
     return result
+
+
+def overfit_report(prices: pd.Series, hist: pd.DataFrame, horizon: int = 20,
+                   pe_hist: pd.DataFrame = None, ff: pd.DataFrame = None,
+                   n_perm: int = None) -> dict:
+    """过拟合与稳健性诊断（样本内外对比 + 子样本稳健性 + 置换检验）。
+
+    1. 样本内 vs 样本外 AUC 差距：样本内 AUC 远高 → 过拟合；
+    2. 子样本稳健性：OOS 按时序拆前后两半分别算 AUC，波动大 → 结论不稳定；
+    3. 置换检验：打乱训练标签重训 n_perm 次，真实 OOS AUC 显著高于随机基线
+       （p 值小）说明捕捉到真实信号而非噪声。
+
+    复用 walk-forward 的最后一个可见窗口做 holdout，训练窗做 purging
+    （剔除标签窗口与 holdout 重叠的样本），避免置换/样本内口径的时序泄漏。
+    返回诊断指标字典，样本不足时返回 {}。
+    """
+    from sklearn.metrics import roc_auc_score
+
+    n_perm = n_perm if n_perm is not None else config.PERMUTATION_TEST_ITERS
+    X_full = _build_features(prices, hist, pe_hist, ff)
+    X, y = _make_dataset(X_full, prices, horizon)
+    if X is None:
+        return {}
+    oos_probs, _, last_train_end = _walk_forward_eval(X, y, horizon)
+    mask = ~np.isnan(oos_probs)
+    if int(mask.sum()) < 10:
+        return {}
+    y_oos = y[mask].to_numpy().astype(int)
+    p_oos = oos_probs[mask].astype(float)
+    oos_auc = float(roc_auc_score(y_oos, p_oos)) if len(set(y_oos)) > 1 else 0.5
+
+    # 训练窗（含 purge，避免训练标签窗口与 holdout 重叠）
+    purge_end = last_train_end - horizon
+    if purge_end >= 120:
+        X_tr, y_tr = X.iloc[:purge_end], y.iloc[:purge_end]
+    else:
+        X_tr, y_tr = X.iloc[:last_train_end], y.iloc[:last_train_end]
+    X_te, y_te = X.iloc[last_train_end:], y.iloc[last_train_end:]
+
+    # 样本内 AUC（最终模型在其训练窗内的拟合优度）
+    model = _fit_model(X_tr, y_tr)
+    p_tr = model.predict_proba(X_tr)[:, 1]
+    is_auc = float(roc_auc_score(y_tr.to_numpy(), p_tr)) if len(set(y_tr.to_numpy())) > 1 else 0.5
+
+    # 子样本稳健性：OOS 按时序拆前后两半
+    half = len(y_oos) // 2
+
+    def _auc(a, b):
+        return float(roc_auc_score(a, b)) if len(set(a)) > 1 else np.nan
+
+    sub1 = _auc(y_oos[:half], p_oos[:half]) if half > 1 else np.nan
+    sub2 = _auc(y_oos[half:], p_oos[half:]) if len(y_oos) > half + 1 else np.nan
+
+    # 置换检验：测试集不变，打乱训练标签重训，构造「无真实信号」的 AUC 零分布
+    y_te_arr = y_te.to_numpy().astype(int)
+    holdout_auc, perm_baseline, p_value = np.nan, None, np.nan
+    if len(y_te_arr) >= 10 and len(set(y_te_arr)) > 1:
+        holdout_auc = float(roc_auc_score(y_te_arr, model.predict_proba(X_te)[:, 1]))
+        rng = np.random.default_rng(42)
+        perm_aucs = []
+        for _ in range(int(n_perm)):
+            y_shuf = pd.Series(rng.permutation(y_tr.to_numpy()), index=y_tr.index)
+            m = _fit_model(X_tr, y_shuf)
+            perm_aucs.append(float(roc_auc_score(y_te_arr, m.predict_proba(X_te)[:, 1])))
+        perm_aucs = np.asarray(perm_aucs, dtype=float)
+        perm_baseline = float(perm_aucs.mean())
+        p_value = float((perm_aucs >= holdout_auc).mean())
+
+    return {
+        "oos_auc": round(oos_auc, 3),
+        "is_auc": round(is_auc, 3),
+        "gap": round(is_auc - oos_auc, 3),
+        "sub_first": None if np.isnan(sub1) else round(sub1, 3),
+        "sub_second": None if np.isnan(sub2) else round(sub2, 3),
+        "holdout_auc": None if np.isnan(holdout_auc) else round(holdout_auc, 3),
+        "perm_baseline": None if perm_baseline is None else round(perm_baseline, 3),
+        "perm_p": None if np.isnan(p_value) else round(p_value, 3),
+        "n_perm": int(n_perm), "n_train": int(len(y_tr)), "n_holdout": int(len(y_te_arr)),
+    }
