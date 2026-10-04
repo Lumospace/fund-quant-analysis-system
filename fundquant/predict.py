@@ -110,14 +110,32 @@ def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, n_splits: int = 5):
     return probs, min_train, int(bounds[-2])
 
 
+def _calibrate_probability(p_cal, t_cal, p_target) -> float:
+    """用「样本外概率 → 真实标签」拟合 Isotonic 单调映射，校准树模型的极端概率。
+
+    p_cal/t_cal 为 walk-forward 样本外(概率, 标签)，p_target 为待校准的最新原始概率。
+    树模型 predict_proba 天然偏 0/1（叶子纯净），Isotonic 保序回归将其映射到真实频率；
+    样本不足或标签单一（无法拟合单调关系）时回退原始概率，避免过度处理。
+    """
+    from sklearn.isotonic import IsotonicRegression
+    p_cal = np.asarray(p_cal, dtype=float)
+    t_cal = np.asarray(t_cal, dtype=float)
+    if p_cal.shape[0] < 10 or len(np.unique(t_cal)) < 2:
+        return float(p_target)
+    iso = IsotonicRegression(out_of_bounds="clip")
+    iso.fit(p_cal, t_cal)
+    return float(np.clip(float(iso.predict([p_target])[0]), 0.05, 0.95))
+
+
 def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: int) -> dict:
     """训练 LightGBM 并返回预测结果（X、y 已由 _make_dataset 构建）。
 
     稳健性改进：
     1. 用 walk-forward 滚动校验估计样本外 AUC/Brier，替代固定 60/80 单次切分；
     2. 按正负样本比例温和加权，缓解类别不平衡对概率的偏置；
-    3. 最终模型复用 walk-forward 最后一个「已可见」训练窗口，避免全样本重训引入未来信息泄漏，
-       保证最新一日概率预测与样本外校验口径（时序外推）一致。
+    3. 最终模型复用 walk-forward 最后一个「已可见」训练窗口，避免全样本重训引入未来信息泄漏；
+    4. 概率经 Isotonic 校准：用样本外(概率,标签)拟合单调映射，抑制树模型 0/1 极端输出，
+       把上涨概率映射到更接近真实频率的区间（留出最后一个目标点，避免标签泄漏）。
     """
     from sklearn.metrics import roc_auc_score, brier_score_loss
 
@@ -135,9 +153,15 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
 
         # 最终模型：复用 walk-forward 最后一个可见窗口（截至 last_train_end），预测最新一行
         model = _fit_model(X.iloc[:last_train_end], y.iloc[:last_train_end])
-        prob_up = float(model.predict_proba(X.iloc[-1:])[0][1])
+        raw_prob = float(model.predict_proba(X.iloc[-1:])[0][1])
         imp = dict(zip(X.columns, model.feature_importances_))
         imp = dict(sorted(imp.items(), key=lambda kv: kv[1], reverse=True)[:8])
+
+        # 概率校准：留出最后一个目标点（raw_prob == oos_probs[-1]），用其余 OOS 点拟合 Isotonic
+        p_vals = oos_probs[mask].astype(float)
+        t_vals = y[mask].astype(float).to_numpy()
+        prob_up = (_calibrate_probability(p_vals[:-1], t_vals[:-1], raw_prob)
+                   if n_test >= 11 else raw_prob)
 
         # 置信度 = 样本外区分度(|AUC-0.5|，含反向) + 样本外概率校准(Brier) 加权合成
         brier_rel = max(0.0, 1.0 - brier_oos / 0.25)             # Brier=0→1，0.25(随机)→0
