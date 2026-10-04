@@ -6,6 +6,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# 缓存键版本号：当缓存的数据格式/口径发生变更时递增，使旧缓存整批失效，避免误命中
+CACHE_VERSION = "v1"
+
 # ============ 金融基础常量 ============
 RISK_FREE_RATE = 0.02          # 无风险利率（年化，近似一年期国债）
 TRADING_DAYS = 252             # 年交易日数

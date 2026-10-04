@@ -39,7 +39,7 @@ def _socket_timeout_wrapper(fn, *args, **kwargs):
 
 
 def _cache_path(key: str) -> str:
-    h = hashlib.md5(key.encode("utf-8")).hexdigest()
+    h = hashlib.md5(f"{config.CACHE_VERSION}:{key}".encode("utf-8")).hexdigest()
     return os.path.join(config.CACHE_DIR, h + ".pkl")
 
 
