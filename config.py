@@ -177,6 +177,7 @@ COLORS = {
     "ref_line": "#cbd5e1",   # 参考线色（y=0、对角线等，比网格稍明显）
     "card_bg": "#ffffff",    # 卡片背景
     "card_border": "#e9edf2",# 卡片边框
+    "mid": "#ffffff",        # 相关性等发散色标的中性中点（不相关）
     "text": "#1e293b",       # 正文
     "text_secondary": "#64748B",
 }
@@ -196,6 +197,7 @@ DARK_COLORS = {
     "ref_line": "#475569",   # 深色参考线（比网格稍亮，深底上清晰）
     "card_bg": "#1E293B",    # 深色卡片背景
     "card_border": "#334155",# 深色卡片边框
+    "mid": "#94A3B8",        # 相关性等发散色标的中性中点（深色下用中性灰，避免与背景趋同）
     "text": "#F1F5F9",       # 深色正文（调亮）
     "text_secondary": "#B7C3D8",
 }

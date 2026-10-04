@@ -247,13 +247,13 @@ def probability_gauge(prob_up: float, title="上涨概率"):
 
 
 def corr_heatmap(corr: pd.DataFrame, title="成分相关性矩阵"):
-    """相关性矩阵热力图（蓝-白-红发散：蓝=负相关，红=正相关，白=不相关）。"""
+    """相关性矩阵热力图（蓝-中性-红发散：蓝=负相关，红=正相关，中点=不相关）。"""
     labels = [str(x) for x in corr.columns]
     z = corr.values.astype(float)
     text = [[f"{v:.2f}" for v in row] for row in z]
     fig = go.Figure(go.Heatmap(
         z=z, x=labels, y=labels, zmin=-1, zmax=1,
-        colorscale=[[0.0, _pal()["accent"]], [0.5, _pal()["card_bg"]], [1.0, _pal()["up"]]],
+        colorscale=[[0.0, _pal()["accent"]], [0.5, _pal()["mid"]], [1.0, _pal()["up"]]],
         text=text, texttemplate="%{text}", textfont=dict(size=11, color=_pal()["text"]),
         colorbar=dict(title="相关系数", thickness=14),
         hovertemplate="%{y} × %{x}: %{z:.2f}<extra></extra>"))
