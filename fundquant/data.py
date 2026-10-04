@@ -7,6 +7,7 @@
 import os
 import re
 import time
+import json
 import pickle
 import socket
 import hashlib
@@ -77,6 +78,48 @@ def cache_mtime(key: str):
         return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(p)))
     except (OSError, FileNotFoundError):
         return None
+
+
+def factor_drift_path(fkey: str, code: str) -> str:
+    """返回某基金因子漂移快照的磁盘路径（`.cache/factor_drift/`，按基金隔离）。"""
+    d = os.path.join(config.CACHE_DIR, "factor_drift")
+    os.makedirs(d, exist_ok=True)
+    key = hashlib.md5(f"{fkey}:{code}".encode("utf-8")).hexdigest()[:16]
+    return os.path.join(d, f"{key}.json")
+
+
+def save_factor_snapshot(fkey: str, code: str, name: str, status: dict) -> None:
+    """把单基金因子状态快照追加为时序落盘（按天幂等，状态无变化时不写）。
+
+    用于因子漂移监控：观察各因子何时「有效→预警→下线→恢复」。仅在内存计算
+    完成后追加不变更既有历史的轻量写，失败静默退出，不影响主流程。
+    """
+    try:
+        path = factor_drift_path(fkey, code)
+        today = time.strftime("%Y-%m-%d")
+        hist = load_factor_snapshot(fkey, code)
+        if hist and hist[-1].get("date") == today:
+            if hist[-1].get("factors") == status:
+                return
+            hist = hist[:-1]  # 当日已有记录但状态变化，覆盖当日快照
+        hist.append({"date": today, "name": name, "factors": status})
+        with open(path, "w", encoding="utf-8") as fp:
+            json.dump(hist[-180:], fp, ensure_ascii=False)
+    except (OSError, PermissionError, TypeError):
+        pass
+
+
+def load_factor_snapshot(fkey: str, code: str) -> list:
+    """读取某基金因子漂移历史（按日期升序的 snapshot 列表）。"""
+    path = factor_drift_path(fkey, code)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
 
 
 def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, allow_stale=True, **kwargs):

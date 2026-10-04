@@ -420,6 +420,29 @@ def validate_factors(prices: pd.Series, hist: pd.DataFrame,
     return df
 
 
+def factor_drift_events(history):
+    """把因子漂移快照历史转为 (漂移表, 状态变化事件) 供界面展示。
+
+    history: data.save_factor_snapshot 落盘、按日期升序的 list，每项 {date, name, factors:{因子:状态}}。
+    返回 (tbl, events)：tbl 为「日期 × 因子 = 状态」的 DataFrame；events 为
+    [(日期, 因子, 旧状态, 新状态)] 的变化清单（升序）。无历史返回 (None, [])。
+    """
+    if not history:
+        return None, []
+    names = sorted({k for h in history for k in h.get("factors", {})})
+    grid = {h.get("date", "?"): h.get("factors", {}) for h in history}
+    tbl = pd.DataFrame(grid, index=names).T.reset_index().rename(columns={"index": "日期"})
+    events = []
+    for i in range(1, len(history)):
+        d0, d1 = history[i - 1].get("date", "?"), history[i].get("date", "?")
+        g0, g1 = grid[d0], grid[d1]
+        for k in names:
+            s0, s1 = g0.get(k), g1.get(k)
+            if s0 and s1 and s0 != s1:
+                events.append((d1, k, s0, s1))
+    return tbl, events
+
+
 def ic_time_series(prices: pd.Series, hist: pd.DataFrame, forward: int = 20,
                    window: int = 60, step: int = 10, pe_hist: pd.DataFrame = None,
                    ff: pd.DataFrame = None):

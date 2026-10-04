@@ -883,6 +883,22 @@ def page_profile():
         st.markdown("#### 因子有效性校验（自动淘汰机制）")
         full_table(fval)
 
+        # ---- 因子漂移持久化监控：本次状态落盘为时序快照，追溯预警/下线历史 ----
+        if fval is not None and not fval.empty:
+            status_map = {str(r["因子"]): str(r["状态"]) for _, r in fval.iterrows()}
+            data.save_factor_snapshot(fkey, code, name, status_map)
+            dr_tbl, dr_events = fac.factor_drift_events(data.load_factor_snapshot(fkey, code))
+            if dr_tbl is not None:
+                st.markdown("---")
+                st.markdown("#### 因子漂移监控（状态变化历史）")
+                if dr_events:
+                    for d, k, s0, s1 in dr_events[-8:][::-1]:
+                        st.markdown(f"- `{d}` **{k}**：{s0} → {s1}")
+                else:
+                    st.caption("各因子状态暂无明显变化（快照已按日持续落盘，后续访问将累积历史）。")
+                with st.expander("查看逐日状态快照"):
+                    full_table(dr_tbl)
+
         fval_names = list(fval["因子"]) if fval is not None and not fval.empty else []
         if fval_names:
             st.markdown("#### 因子 IC 时序与累计 IC")
