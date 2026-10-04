@@ -156,15 +156,22 @@ def _strategies_section(summary) -> str:
         return "<p>暂无策略回测数据。</p>"
     df = summary.copy()
     pct_cols = {"总收益", "年化收益", "年化波动", "最大回撤"}
+    int_cols = {"交易次数"}
     head = "".join(f"<th>{c}</th>" for c in df.columns)
     rows = []
     for _, r in df.iterrows():
         cells = []
         for c in df.columns:
             v = r[c]
-            if isinstance(v, (int, float)) and not pd.isna(v):
-                cells.append(f"<td>{v*100:.1f}%</td>" if c in pct_cols
-                             else f"<td>{v:.2f}</td>")
+            if isinstance(v, str):
+                cells.append(f"<td>{v}</td>")
+            elif isinstance(v, (int, float)) and not pd.isna(v):
+                if c in pct_cols:
+                    cells.append(f"<td>{v*100:.1f}%</td>")
+                elif c in int_cols:
+                    cells.append(f"<td>{int(v)}</td>")
+                else:
+                    cells.append(f"<td>{v:.2f}</td>")
             else:
                 cells.append("<td>—</td>")
         rows.append("<tr>" + "".join(cells) + "</tr>")
