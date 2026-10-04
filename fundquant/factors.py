@@ -377,6 +377,8 @@ def validate_factors(prices: pd.Series, hist: pd.DataFrame,
         ic_series = monthly_ic.dropna()
         n_valid = len(ic_series)
         ir = factor_ir(ic_series) if n_valid > 1 else np.nan
+        # 月度 IC 均值的 t 统计量：t = mean/std × sqrt(n)（检验「因子方向无关的 IC 均值 = 0」）
+        t_val = ir * np.sqrt(n_valid) if n_valid > 1 and np.isfinite(ir) else np.nan
 
         # 累计连续失效月数（仅作展示信息，不再作为下线判据）
         consec = 0
@@ -409,6 +411,7 @@ def validate_factors(prices: pd.Series, hist: pd.DataFrame,
             "因子": f.name, "类别": f.category, "方向": "正向" if f.higher_better else "负向",
             "IC": round(ic_full, 4) if not np.isnan(ic_full) else np.nan,
             "IR": round(ir, 3) if not np.isnan(ir) else np.nan,
+            "t值": round(t_val, 2) if not np.isnan(t_val) else np.nan,
             "多头超额胜率": round(win, 4) if not np.isnan(win) else np.nan,
             "单调性": round(muniv, 3) if not np.isnan(muniv) else np.nan,
             "连续失效月数": max_consec, "状态": status, "说明": f.desc,

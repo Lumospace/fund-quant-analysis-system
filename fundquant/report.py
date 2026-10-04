@@ -206,13 +206,14 @@ def _factors_section(factors) -> str:
         top = (f"最强有效因子为 <strong>{t['因子']}</strong>"
                f"（|IC|={abs(t['IC']):.3f}，{t['方向']}）。")
     cnt = "、".join(f"{k} {v} 个" for k, v in state.items()) or "无"
-    head = "".join(f"<th>{c}</th>" for c in ["因子", "类别", "IC", "IR", "状态"])
+    head = "".join(f"<th>{c}</th>" for c in ["因子", "类别", "IC", "IR", "t值", "状态"])
     rows = []
     for _, r in df.iterrows():
         ic = "—" if pd.isna(r["IC"]) else f"{r['IC']:.3f}"
         ir = "—" if pd.isna(r["IR"]) else f"{r['IR']:.3f}"
+        tv = "—" if pd.isna(r.get("t值")) else f"{r['t值']:.2f}"
         rows.append(f"<tr><td>{r['因子']}</td><td>{r['类别']}</td>"
-                    f"<td>{ic}</td><td>{ir}</td><td>{r['状态']}</td></tr>")
+                    f"<td>{ic}</td><td>{ir}</td><td>{tv}</td><td>{r['状态']}</td></tr>")
     table = f"<table><tr>{head}</tr>{''.join(rows)}</table>"
     return (f"<p>因子自动校验（滚动 IC 失效占比）：{cnt}。{top}"
             f"「已下线」因子已从预测特征中剔除。</p>{table}")

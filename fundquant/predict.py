@@ -87,12 +87,19 @@ def _fit_model(X_train: pd.DataFrame, y_train: pd.Series):
     return model
 
 
-def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, n_splits: int = 5):
-    """expanding-window walk-forward 样本外校验。
+def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, horizon: int,
+                       n_splits: int = 5, embargo: int = 0):
+    """expanding-window walk-forward 样本外校验（含时序 purging）。
 
     始终用「已可见」历史窗口训练、向后滚动预测，收集每个测试样本的
     样本外(OOS)概率，替代固定 60/80 单次切分带来的近端偏差。
-    返回 (OOS 概率数组[未覆盖处为 NaN], 初始训练窗口样本数)。
+
+    时序 purging：多日标签 y_t = 1{price[t+horizon] > price[t]}，训练样本 t
+    的标签已用到 t~t+horizon 的未来信息。滚动外推时若训练样本的标签窗口与
+    测试区间重叠，会造成时序泄漏。这里剔除标签窗口与测试区间重叠的训练样本
+    （purge），可再按 embargo 额外留出间隔；purge 后训练样本不足时回退为不
+    purge，保证短历史基金可用。
+    返回 (OOS 概率数组[未覆盖处为 NaN], 初始训练窗口样本数, 最后一个可见窗口终点)。
     """
     n = len(X)
     min_train = max(120, int(n * 0.5))
@@ -100,11 +107,14 @@ def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, n_splits: int = 5):
         n_splits = 3
     probs = np.full(n, np.nan)
     bounds = np.unique(np.linspace(min_train, n, n_splits + 1).astype(int))
+    min_effective = 120  # purge 后最少训练样本数，低于此值则放弃 purge
     for i in range(len(bounds) - 1):
         train_end, test_end = int(bounds[i]), int(bounds[i + 1])
         if test_end - train_end < 1:
             continue
-        model = _fit_model(X.iloc[:train_end], y.iloc[:train_end])
+        purge_end = train_end - horizon - embargo
+        tr_slice = slice(0, purge_end) if purge_end >= min_effective else slice(0, train_end)
+        model = _fit_model(X.iloc[tr_slice], y.iloc[tr_slice])
         probs[train_end:test_end] = model.predict_proba(X.iloc[train_end:test_end])[:, 1]
     # 返回最后一个可见训练窗口的终点，供最终预测模型复用（避免全样本重训泄漏未来信息）
     return probs, min_train, int(bounds[-2])
@@ -140,7 +150,7 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
     from sklearn.metrics import roc_auc_score, brier_score_loss
 
     try:
-        oos_probs, min_train, last_train_end = _walk_forward_eval(X, y)
+        oos_probs, min_train, last_train_end = _walk_forward_eval(X, y, horizon)
         mask = ~np.isnan(oos_probs)
         n_test = int(mask.sum())
 
@@ -279,7 +289,7 @@ def calibration_curve_data(prices: pd.Series, hist: pd.DataFrame,
     X, y = _make_dataset(X_full, prices, horizon)
     if X is None or len(X) < 120:
         return {}
-    oos_probs, _, _ = _walk_forward_eval(X, y)
+    oos_probs, _, _ = _walk_forward_eval(X, y, horizon)
     mask = ~np.isnan(oos_probs)
     if mask.sum() < 10:
         return {}
