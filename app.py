@@ -64,12 +64,16 @@ def inject_css():
     _dark = st.session_state.dark_mode
     _sb_bg = C["card_bg"] if _dark else "#ffffff"
     _sb_bd = C["card_border"] if _dark else "#dbe4ee"
-    _sb_tx = C["text"] if _dark else "#1e293b"
+    _sb_tx = C["text"] if _dark else "#0F172A"
     _sb_ac = C["accent"] if _dark else "#2B6CB0"
     st.markdown(f"""
     <style>
     [data-testid="stMain"] .block-container {{padding-top: 3rem; max-width: 1440px;}}
     h1,h2,h3,h4,h5,h6 {{color: {C['primary']};}}
+    /* 全局字号放大：正文段落/列表与 section 小标题提升可读性 */
+    [data-testid="stMain"] [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMain"] [data-testid="stMarkdownContainer"] li {{font-size: 17px;}}
+    [data-testid="stMain"] [data-testid="stMarkdownContainer"] h4 {{font-size: 18px;}}
     .stApp {{background: {C['bg']};
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
                      "Helvetica Neue", Arial, sans-serif;}}
@@ -119,15 +123,15 @@ def inject_css():
     /* 指标卡片 */
     .metric-card {{background:{C['card_bg']}; border-radius:10px; padding:12px 14px;
         box-shadow:0 1px 4px rgba(30,58,95,.08); border:1px solid {C['card_border']};}}
-    .metric-card .label {{color:{C['text_secondary']}; font-size:12px; white-space:nowrap; margin-bottom:4px;}}
-    .metric-card .value {{color:{C['text']}; font-size:20px; font-weight:700;
+    .metric-card .label {{color:{C['text_secondary']}; font-size:13px; white-space:nowrap; margin-bottom:4px;}}
+    .metric-card .value {{color:{C['text']}; font-size:21px; font-weight:700;
         white-space:nowrap; line-height:1.2;}}
     .risk-box {{background:{C['up_bg']}; border-left:4px solid {C['up']}; padding:10px 14px;
         border-radius:6px; margin:10px 0; color:{C['text']}; font-size:13px;}}
     .badge {{display:inline-block; background:{C['primary']}; color:#fff;
         padding:3px 12px; border-radius:14px; font-size:13px; margin-left:6px;}}
     /* 完整表格 */
-    .dtable {{width:100%; border-collapse:collapse; font-size:13px; background:{C['card_bg']};}}
+    .dtable {{width:100%; border-collapse:collapse; font-size:14px; background:{C['card_bg']};}}
     .dtable th {{background:{C['primary']}; color:#fff; padding:6px 10px;
         text-align:left; white-space:nowrap;}}
     .dtable td {{border:1px solid {C['card_border']}; padding:6px 10px; vertical-align:top;

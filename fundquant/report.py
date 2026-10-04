@@ -10,10 +10,10 @@ _HTML_HEAD = """<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <title>{title}</title>
 <style>
-body{{font-family:'Microsoft YaHei',sans-serif;margin:32px;color:#1e293b;background:#f5f7fa}}
+body{{font-family:'Microsoft YaHei',sans-serif;margin:32px;color:#0F172A;background:#f5f7fa;font-size:15px}}
 h1{{color:#1E3A5F}} h2{{color:#1E3A5F;border-bottom:2px solid #1E3A5F;padding-bottom:6px;margin-top:24px}}
 table{{border-collapse:collapse;width:100%;margin:12px 0;background:#fff}}
-td,th{{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;font-size:13px}}
+td,th{{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;font-size:14px}}
 th{{background:#1E3A5F;color:#fff}}
 .badge{{display:inline-block;background:#18A058;color:#fff;padding:4px 14px;border-radius:16px;font-size:16px}}
 .warn{{background:#FFF1F0;border-left:4px solid #E5484D;padding:10px 14px;margin:14px 0}}
@@ -26,10 +26,10 @@ _HTML_HEAD_DARK = """<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <title>{title}</title>
 <style>
-body{{font-family:'Microsoft YaHei',sans-serif;margin:32px;color:#F1F5F9;background:#0F172A}}
+body{{font-family:'Microsoft YaHei',sans-serif;margin:32px;color:#F8FAFC;background:#0F172A;font-size:15px}}
 h1{{color:#8BB8E8}} h2{{color:#8BB8E8;border-bottom:2px solid #8BB8E8;padding-bottom:6px;margin-top:24px}}
 table{{border-collapse:collapse;width:100%;margin:12px 0;background:#1E293B}}
-td,th{{border:1px solid #334155;padding:8px 10px;text-align:left;font-size:13px;color:#F1F5F9}}
+td,th{{border:1px solid #334155;padding:8px 10px;text-align:left;font-size:14px;color:#F1F5F9}}
 th{{background:#8BB8E8;color:#0F172A}}
 .badge{{display:inline-block;background:#18A058;color:#fff;padding:4px 14px;border-radius:16px;font-size:16px}}
 .warn{{background:#3B1A1A;border-left:4px solid #FC8181;padding:10px 14px;margin:14px 0;color:#F1F5F9}}

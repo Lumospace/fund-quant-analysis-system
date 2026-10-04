@@ -33,18 +33,18 @@ def _base(fig, title="", height=380, showlegend=None, colors=None):
     is_dark = _is_dark() or colors is not None
     fig.update_layout(
         title=dict(text=title, x=0.0, xanchor="left",
-                   font=dict(size=15, color=pal["primary"])),
+                   font=dict(size=17, color=pal["primary"])),
         template="plotly_dark" if is_dark else "plotly_white",
         height=height,
         margin=dict(l=50, r=20, t=50, b=40),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor=pal["bg"] if is_dark else "#ffffff",
         hovermode="x unified",
-        hoverlabel=dict(bgcolor=pal["primary"], font_color="#ffffff", font_size=12),
-        font=dict(color=pal["neutral"], size=12),
+        hoverlabel=dict(bgcolor=pal["primary"], font_color="#ffffff", font_size=13),
+        font=dict(color=pal["neutral"], size=13.5),
         legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="center", x=0.5,
                     bgcolor="rgba(30,41,59,0.7)" if is_dark else "rgba(255,255,255,0.7)",
-                    font=dict(size=10, color=pal["neutral"])),
+                    font=dict(size=11.5, color=pal["neutral"])),
         dragmode="zoom",
         modebar=dict(bgcolor="rgba(255,255,255,0.08)", color=pal["neutral"]),
     )

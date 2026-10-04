@@ -176,7 +176,7 @@ COLORS = {
     "bg": "#F5F7FA",         # 浅灰
     "up": "#E5484D",         # 上涨红（A股惯例：红涨绿跌，正数用红）
     "down": "#18A058",       # 下跌绿（A股惯例：红涨绿跌，负数用绿）
-    "neutral": "#64748B",
+    "neutral": "#475569",
     "accent": "#2B6CB0",
     "warn": "#D9822B",       # 警示琥珀（区别于上涨红，用于风险强调）
     "up_bg": "#FDECEC",      # 上涨语义浅红背景（仪表盘等）
@@ -187,8 +187,8 @@ COLORS = {
     "card_bg": "#ffffff",    # 卡片背景
     "card_border": "#e9edf2",# 卡片边框
     "mid": "#ffffff",        # 相关性等发散色标的中性中点（不相关）
-    "text": "#1e293b",       # 正文
-    "text_secondary": "#64748B",
+    "text": "#0F172A",       # 正文（加深，提升对比）
+    "text_secondary": "#475569",
 }
 
 DARK_COLORS = {
@@ -196,7 +196,7 @@ DARK_COLORS = {
     "bg": "#0F172A",         # 深海军蓝
     "up": "#FC8181",         # 上涨红（深色版柔和红）
     "down": "#68D391",       # 下跌绿（深色版柔和绿）
-    "neutral": "#B7C3D8",
+    "neutral": "#CBD5E1",
     "accent": "#63B3ED",
     "warn": "#F6AD55",       # 警示琥珀
     "up_bg": "#3B1A1A",      # 上涨语义深红背景
@@ -207,8 +207,8 @@ DARK_COLORS = {
     "card_bg": "#1E293B",    # 深色卡片背景
     "card_border": "#334155",# 深色卡片边框
     "mid": "#94A3B8",        # 相关性等发散色标的中性中点（深色下用中性灰，避免与背景趋同）
-    "text": "#F1F5F9",       # 深色正文（调亮）
-    "text_secondary": "#B7C3D8",
+    "text": "#F8FAFC",       # 深色正文（调亮，提升对比）
+    "text_secondary": "#CBD5E1",
 }
 
 
