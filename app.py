@@ -691,13 +691,14 @@ def page_profile():
         st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
 
         st.markdown("#### 相对基准走势")
-        bench_name = data.resolve_benchmark(name)
+        bench_name, matched = data.resolve_benchmark(name)
         bm = c_benchmark(bench_name)
         bm_p = ind.to_price_series(bm).tail(len(prices))
         prices.index = pd.to_datetime(prices.index)
         bm_p.index = pd.to_datetime(bm_p.index)
-        st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], bench_name: bm_p},
-                                          f"基金 vs {bench_name}（归一化）"), width="stretch")
+        bench_label = bench_name if matched else f"{bench_name}（市场参照）"
+        st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], bench_label: bm_p},
+                                          f"基金 vs {bench_label}（归一化）"), width="stretch")
 
     with tabs[2]:  # AI 预测
         mc, _ = c_forecast(code, fkey, name, start, end)

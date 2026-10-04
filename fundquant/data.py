@@ -263,17 +263,17 @@ _BENCHMARK_KEYWORDS = [
 ]
 
 
-def resolve_benchmark(name: str) -> str:
-    """按基金名称关键词解析最贴切的宽基基准名，未命中回退沪深300。
+def resolve_benchmark(name: str):
+    """按基金名称关键词解析最贴切的宽基基准，返回 (基准名, 是否精确命中)。
 
-    用于「相对基准走势」去硬编码：债/货/行业主题等匹配不到宽基时仍回退
-    沪深300 作为市场基准（保留原行为，不丢失对比图）。
+    用于「相对基准走势」去硬编码：行业/主题/债/货基金匹配不到宽基时回退
+    沪深300 并标记为「市场参照」（matched=False），避免把行业 beta 误当超额收益。
     """
     n = str(name or "")
     for keyword, bench in _BENCHMARK_KEYWORDS:
         if keyword in n:
-            return bench
-    return "沪深300"
+            return bench, True
+    return "沪深300", False
 
 
 # ==================== 指数真实估值（PE-TTM） ====================
