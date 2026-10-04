@@ -69,7 +69,7 @@ def inject_css():
     st.markdown(f"""
     <style>
     .main .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
-    h1,h2,h3,h4 {{color: {C['primary']};}}
+    h1,h2,h3,h4,h5,h6 {{color: {C['primary']};}}
     .stApp {{background: {C['bg']};
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
                      "Helvetica Neue", Arial, sans-serif;}}
@@ -108,7 +108,7 @@ def inject_css():
     .dtable tr:nth-child(even) td {{background:{C['bg']};}}
     {f"""
     /* === 深色模式：正文与原生组件色彩适配（保留涨跌红绿等语义色） === */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {{
         color: {C['primary']} !important;}}
     [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
     [data-testid="stMarkdownContainer"] strong, [data-testid="stMarkdownContainer"] em,
@@ -156,6 +156,18 @@ def inject_css():
         border: 1px solid rgba(255,255,255,0.18) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stButton"] > button[kind="primary"] {{
+        background: {C['primary']} !important;
+        color: #0F172A !important;
+        border: none !important;
+    }}
+    /* 正文区按钮：深底亮文；primary/提交按钮用主题色，避免深色下白底按钮突兀 */
+    .main [data-testid="stButton"] > button[kind="secondary"] {{
+        color: {C['text']} !important;
+        background: {C['card_bg']} !important;
+        border: 1px solid {C['card_border']} !important;
+    }}
+    .main [data-testid="stButton"] > button[kind="primary"],
+    .main [data-testid="stFormSubmitButton"] > button {{
         background: {C['primary']} !important;
         color: #0F172A !important;
         border: none !important;
@@ -297,11 +309,14 @@ def render_metrics_row(metrics, keys_labels, per_row=4):
             metric_card(label, v, container=col)
 
 
-def full_table(df: pd.DataFrame):
-    """完整表格：直接渲染全部内容（不截断），长文本自动换行。"""
+def full_table(df: pd.DataFrame, height: int = None):
+    """完整表格：直接渲染全部内容（不截断），长文本自动换行；height 指定时纵向滚动。"""
     html = df.to_html(index=False, na_rep="", border=0, escape=True)
     html = html.replace('class="dataframe"', 'class="dtable"', 1)
-    st.markdown(f"<div style='overflow-x:auto;'>{html}</div>", unsafe_allow_html=True)
+    style = "overflow-x:auto;"
+    if height:
+        style += f"max-height:{height}px; overflow-y:auto;"
+    st.markdown(f"<div style='{style}'>{html}</div>", unsafe_allow_html=True)
 
 
 def _fund_labels(u: pd.DataFrame):
@@ -564,8 +579,7 @@ def page_dashboard():
 
     def _show_list(df_, title):
         st.markdown(f"**{title}**")
-        st.dataframe(_ranked(df_, ["code", "name", "price", "pct_chg", "sector"], _RENAME),
-                     width="stretch", hide_index=True)
+        full_table(_ranked(df_, ["code", "name", "price", "pct_chg", "sector"], _RENAME))
 
     c1, c2 = st.columns(2)
     with c1:
@@ -675,7 +689,7 @@ def page_profile():
                     "AUC": r["auc"],
                     "方法": r["method"],
                 })
-            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            full_table(pd.DataFrame(rows))
 
             cols = st.columns(len(mc))
             for col, (h, r) in zip(cols, mc.items()):
@@ -820,11 +834,11 @@ def page_screener():
         scored = scoring.score_universe(rank)
         st.markdown(f"共 {len(scored)} 只场外基金，按综合评分排序（现仅基于收益维度；风险评估需进入单基金详查）")
         show = scored[scored["综合评分"] >= min_score]
-        st.dataframe(_ranked(show,
-                             ["code", "name", "m1", "m3", "m6", "y1", "ytd", "综合评分", "评级"],
-                             {"code": "代码", "name": "简称", "m1": "近1月%", "m3": "近3月%",
-                              "m6": "近6月%", "y1": "近1年%", "ytd": "今年来%"}),
-                     width="stretch", hide_index=True)
+        full_table(_ranked(show,
+                           ["code", "name", "m1", "m3", "m6", "y1", "ytd", "综合评分", "评级"],
+                           {"code": "代码", "name": "简称", "m1": "近1月%", "m3": "近3月%",
+                            "m6": "近6月%", "y1": "近1年%", "ytd": "今年来%"}),
+                   height=480)
         st.markdown("#### 收益对比 TOP10")
         top10 = scored.head(10)
         st.plotly_chart(charts.bar_compare(
@@ -837,24 +851,27 @@ def page_screener():
             st.warning("场内ETF行情不可用。")
             return
         sectors = ["全部"] + sorted(u["sector"].dropna().unique().tolist())
+        # 排序依据按实际存在的列动态提供，避免数据源降级（如新浪源）缺失「流通市值」时触发 KeyError
+        sort_map = {"涨跌幅%": "pct_chg", "成交额": "amount"}
+        if "流通市值" in u.columns:
+            sort_map["流通市值"] = "流通市值"
         c1, c2 = st.columns([1, 1])
         with c1:
             sec = st.selectbox("行业/板块", sectors, key="scr_sec")
         with c2:
-            sort_by = st.selectbox("排序依据", ["涨跌幅%", "成交额", "流通市值"], key="scr_sort")
+            sort_by = st.selectbox("排序依据", list(sort_map.keys()), key="scr_sort")
         f = u if sec == "全部" else u[u["sector"] == sec]
         for c in ["pct_chg", "amount", "流通市值"]:
             if c in f.columns:
                 f[c] = pd.to_numeric(f[c], errors="coerce")
-        sort_key = {"涨跌幅%": "pct_chg", "成交额": "amount", "流通市值": "流通市值"}[sort_by]
+        sort_key = sort_map[sort_by]
         f = f.sort_values(sort_key, ascending=False).head(50)
         st.markdown(f"共 {len(f)} 只场内ETF 实时行情（按 {sort_by} 排序前50），"
                     f"详细指标请进入「基金画像」查看。")
-        st.dataframe(_ranked(f,
-                             ["code", "name", "price", "pct_chg", "amount", "流通市值", "sector"],
-                             {"code": "代码", "name": "名称", "price": "最新价", "pct_chg": "涨跌幅%",
-                              "amount": "成交额", "sector": "板块"}),
-                     width="stretch", hide_index=True)
+        full_table(_ranked(f,
+                           ["code", "name", "price", "pct_chg", "amount", "流通市值", "sector"],
+                           {"code": "代码", "name": "名称", "price": "最新价", "pct_chg": "涨跌幅%",
+                            "amount": "成交额", "sector": "板块"}))
 
 
 # ==================== 页面 5：基金对比 ====================
@@ -1454,7 +1471,7 @@ def page_backtest():
     show["夏普比率"] = show["夏普比率"].map(_num)
     show["卡玛比率"] = show["卡玛比率"].map(_num)
     show["交易次数"] = show["交易次数"].map(lambda v: f"{int(v)}" if pd.notna(v) else "--")
-    st.dataframe(show, width="stretch", hide_index=True)
+    full_table(show)
 
     navs = {r["name"]: r["nav"] for r in results.values() if len(r["nav"]) > 1}
     st.markdown("#### 各策略净值走势（起点 = 1）")
@@ -1622,7 +1639,7 @@ def page_report():
                  "预期收益": f"{f.get('expected_return', 0):.2f}%"}
                 for h, f in sorted(mc.items())
             ])
-            st.dataframe(fdf, width="stretch", hide_index=True)
+            full_table(fdf)
         st.markdown("#### 核心指标")
         full_table(pd.DataFrame([{"指标": k, "数值": v, "白话释义": scoring.GLOSSARY.get(k, "")}
                                  for k, v in metrics.items()]))
