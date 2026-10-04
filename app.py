@@ -68,7 +68,7 @@ def inject_css():
     _sb_ac = C["accent"] if _dark else "#2B6CB0"
     st.markdown(f"""
     <style>
-    [data-testid="stMain"] .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
+    [data-testid="stMain"] .block-container {{padding-top: 3rem; max-width: 1440px;}}
     h1,h2,h3,h4,h5,h6 {{color: {C['primary']};}}
     .stApp {{background: {C['bg']};
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
@@ -1737,7 +1737,7 @@ def page_stress(preset_mode=None):
 # ==================== 页面 11：一键报告 ====================
 def page_report():
     st.header("一键量化分析报告")
-    st.caption("汇集基金核心指标、AI 预测、持仓穿透与操作建议，支持 HTML 导出")
+    st.caption("汇集基金核心指标、AI 预测与持仓穿透，支持 HTML 导出")
     code, name, fkey = cur_fund()
     format_ = st.radio("报告格式", ["HTML", "文本摘要"], horizontal=True)
 
@@ -1748,11 +1748,8 @@ def page_report():
     metrics = res["metrics"].copy()
     _vp = metrics["估值分位"]
     metrics["估值状态"] = ind.valuation_status(_vp / 100) if _vp is not None else "数据不足"
-    pred = res["pred"]
     score = scoring.composite_score(metrics, st.session_state.style)
     stress_res = stress.stress_test_fund(prices)
-    advice = report.generate_operation_advice(metrics, pred, st.session_state.style,
-                                              stress=stress_res, score=score)
     mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
     holdings = c_holdings(code)
     lookthrough = c_lookthrough(code)
@@ -1763,7 +1760,7 @@ def page_report():
     dca_res = c_dca_result(code, fkey, name, dca_start, default_end())
 
     if format_ == "HTML":
-        html = report.build_fund_report_html(name, code, metrics, score, advice,
+        html = report.build_fund_report_html(name, code, metrics, score,
                                              forecasts=mc, holdings=holdings,
                                              stress=stress_res, strategies=strat_summary,
                                              dca=dca_res, lookthrough=lookthrough,
@@ -1771,7 +1768,7 @@ def page_report():
         st.download_button("下载 HTML 报告", data=html, file_name=f"{code}_report.html",
                            mime="text/html")
         # 内联预览按当前主题深色化；下载版保持浅色，便于打印
-        preview = report.build_fund_report_html(name, code, metrics, score, advice,
+        preview = report.build_fund_report_html(name, code, metrics, score,
                                                 forecasts=mc, holdings=holdings,
                                                 stress=stress_res, strategies=strat_summary,
                                                 dca=dca_res, lookthrough=lookthrough,
@@ -1781,9 +1778,6 @@ def page_report():
     else:
         st.markdown(f"### {name}（{code}）量化分析摘要")
         st.markdown(f"**综合评分 {score['total']}（{score['rating']}，风格 {score['style']}）**")
-        st.markdown("#### 操作建议")
-        for k, v in advice.items():
-            st.markdown(f"**{k}**：{v}")
         st.markdown("#### AI 多周期预测")
         if mc:
             fdf = pd.DataFrame([

@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""智能配置建议输出（落地应用出口）与报告生成。
-
-分层输出操作建议：优势/风险 -> 走势概率判断 -> 适配人群 -> 操作指令 ->
-仓位比例 -> 止盈止损点 -> 持仓注意事项 -> 压力测试结论。
-"""
-import numpy as np
+"""量化分析报告生成。"""
 import pandas as pd
 import config
 from .scoring import GLOSSARY
@@ -42,70 +37,6 @@ th{{background:#8BB8E8;color:#0F172A}}
 </style></head><body>"""
 
 _HTML_FOOT = '<div class="footer">本报告由 FundQuant 量化分析系统自动生成，仅供参考，不构成投资建议。</div></body></html>'
-
-
-def generate_operation_advice(metrics: dict, prediction: dict = None,
-                              style: str = "稳健", trend: dict = None,
-                              stress: dict = None, score: dict = None) -> dict:
-    """生成完整分层操作建议。"""
-    prof = config.STYLE_PROFILES.get(style, config.STYLE_PROFILES["稳健"])
-    vol = metrics.get("年化波动率", 0) / 100
-    mdd = abs(metrics.get("最大回撤", 0)) / 100
-    ann = metrics.get("年化收益", 0) / 100
-
-    if mdd > prof["max_drawdown_limit"] * 1.5:
-        action = "减仓/清仓"
-    elif vol > prof["target_vol"] * 1.3:
-        action = "减仓"
-    elif ann > 0 and mdd <= prof["max_drawdown_limit"] * 0.7:
-        action = "加仓"
-    else:
-        action = "持有"
-
-    prob_txt = "暂无 AI 预测"
-    if prediction:
-        prob_up = prediction.get("prob_up")
-        if prob_up is not None:
-            h = prediction.get("horizon", 20)
-            prob_txt = (f"未来 {h} 日上涨概率 {prob_up*100:.0f}%、"
-                        f"下跌概率 {(1-prob_up)*100:.0f}%（置信度 {prediction.get('confidence', 0.3)*100:.0f}%）")
-
-    risk_load = max(0.1, 1.0 - mdd / max(prof["max_drawdown_limit"] * 2, 0.2))
-    position = np.clip(risk_load, 0.15, 1.0)
-    pos_txt = f"参考仓位 {position*100:.0f}%（相对可用资金）"
-
-    stop_loss = -max(0.05, vol * 1.5)
-    take_profit = max(0.10, vol * 2.5)
-    point_txt = (f"参考止盈 +{take_profit*100:.0f}%、止损 -{abs(stop_loss)*100:.0f}%"
-                 f"（基于年化波动 {vol*100:.1f}% 推得，可自行调整）")
-
-    stress_txt = "暂无压力测试"
-    if stress:
-        worst = max([v["最大回撤"] for v in stress.values()
-                     if isinstance(v.get("最大回撤"), (int, float))], default=None)
-        if worst is not None:
-            stress_txt = f"历史极端情景下最大回撤约 {worst:.1f}%，请确认可承受该幅度缩水"
-
-    fit = {
-        "保守": "适合看重本金安全、厌恶回撤的投资者",
-        "稳健": "适合追求收益与波动平衡的长期投资者",
-        "进取": "适合能承受较大波动、追求高弹性的投资者",
-    }.get(style, "")
-
-    return {
-        "核心优势与风险": (f"年化收益 {metrics.get('年化收益', '--')}%、年化波动 {vol*100:.1f}%、"
-                     f"最大回撤 {metrics.get('最大回撤', '--')}%。"),
-        "走势概率判断": prob_txt,
-        "适配人群": fit,
-        "操作指令": action,
-        "仓位比例": pos_txt,
-        "止盈止损": point_txt,
-        "注意事项": (
-            f"投资周期宜匹配 {style} 风格；回测存在幸存者偏差；"
-            f"AI 预测仅为概率参考，不保证涨跌。"
-        ),
-        "压力测试结论": stress_txt,
-    }
 
 
 def metrics_markdown_table(metrics: dict) -> str:
@@ -289,7 +220,7 @@ def _dca_section(dca: dict) -> str:
 
 
 def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
-                           advice: dict, forecasts: dict = None, holdings=None,
+                           forecasts: dict = None, holdings=None,
                            stress: dict = None, strategies=None, dca: dict = None,
                            lookthrough: dict = None, factors=None,
                            dark: bool = False) -> str:
@@ -297,9 +228,6 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
         f"<tr><td>{k}</td><td>{d['weight']*100:.0f}%</td>"
         f"<td>{d['score']:.1f}</td><td>{'; '.join(d['reasons'])}</td></tr>"
         for k, d in score["breakdown"].items()
-    )
-    advice_rows = "".join(
-        f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in advice.items()
     )
     head = (_HTML_HEAD_DARK if dark else _HTML_HEAD).format(title=f"{name} 量化分析报告")
     score_color = "#8BB8E8" if dark else "#1E3A5F"
@@ -333,9 +261,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 {_strategies_section(strategies)}
 <h2>十一、定投测算</h2>
 {_dca_section(dca)}
-<h2>十二、落地操作建议</h2>
-<table><tr><th>项目</th><th>内容</th></tr>{advice_rows}</table>
-<h2>十三、合规声明</h2>
+<h2>十二、合规声明</h2>
 <div class="warn">{config.RISK_DISCLAIMER}</div>
 {_HTML_FOOT}"""
     return html
