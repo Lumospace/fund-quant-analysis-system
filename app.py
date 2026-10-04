@@ -848,8 +848,10 @@ def page_profile():
                 st.plotly_chart(charts.factor_ic_chart(cum_sel, "累计 IC 曲线", cumulative=True),
                                 width="stretch", key="prof_fac_ic_cum")
         st.markdown("---")
-        st.caption("因子有效性基于滚动 IC 时序统计：IC 均值 >0 且 t 检验显著才标记为可用。"
-                   "失败比例 ≥40% 预警、≥60% 已下线。")
+        st.caption("因子有效性基于月度滚动 IC 自动判定：近 12 个月里 |IC|<0.02 的失效月份"
+                   "占比 ≥40% 预警、≥60% 自动下线（样本不足月不判定，短历史不轻易下线）。"
+                   "t值 = 月度 IC 均值 ÷ 标准差 × √月数，|t| 越大代表 IC 方向越稳定；"
+                   "「有效」仅代表 |IC| 强度达标，因子方向以其自身定义为准、由模型学习符号。")
 
         fcorr = res.get("fcorr")
         fwarn = res.get("fwarn")
@@ -1216,7 +1218,8 @@ def page_portfolio():
     # ---- 优化方法横向回测对比（滚动样本外） ----
     st.markdown("#### 优化方法横向回测对比（样本外）")
     st.caption("滚动训练窗口、逐步外推，评估各优化方法的样本外表现，避免仅看一次全样本"
-               "最优权重带来的过拟合。")
+               "最优权重带来的过拟合。每次调仓已按换仓幅度扣除单边交易成本（万2.5），"
+               "首期按满仓建仓计。")
     f1, f2 = st.columns(2)
     with f1:
         train_win = int(st.select_slider("训练窗口（交易日）", options=[60, 126, 252], value=126))
@@ -1325,6 +1328,8 @@ def page_allocation():
     full_table(summary_df)
 
     st.markdown("#### 再平衡回测（vs 买入持有）")
+    st.caption("两臂均扣除首期建仓成本；再平衡臂每次调仓额外按换仓幅度扣单边交易成本"
+               "（万2.5），真实反映再平衡换手代价。")
     freq_map = {"月度": 21, "季度": 63, "年度": 252}
     f1, f2 = st.columns(2)
     with f1:
