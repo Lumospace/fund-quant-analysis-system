@@ -253,6 +253,29 @@ def get_benchmark(name: str = "沪深300") -> pd.DataFrame:
     return df
 
 
+# 基金名称关键词 -> 最贴切宽基基准（长词/更具体在前，避免子串误匹配）
+_BENCHMARK_KEYWORDS = [
+    ("中证1000", "中证1000"),
+    ("中证500", "中证500"),
+    ("创业板", "创业板指"),
+    ("上证50", "上证50"),
+    ("沪深300", "沪深300"),
+]
+
+
+def resolve_benchmark(name: str) -> str:
+    """按基金名称关键词解析最贴切的宽基基准名，未命中回退沪深300。
+
+    用于「相对基准走势」去硬编码：债/货/行业主题等匹配不到宽基时仍回退
+    沪深300 作为市场基准（保留原行为，不丢失对比图）。
+    """
+    n = str(name or "")
+    for keyword, bench in _BENCHMARK_KEYWORDS:
+        if keyword in n:
+            return bench
+    return "沪深300"
+
+
 # ==================== 指数真实估值（PE-TTM） ====================
 
 def get_index_pe_history(index_name: str) -> pd.DataFrame:
@@ -317,6 +340,64 @@ def _clean_open_fund_rank(df: pd.DataFrame) -> pd.DataFrame:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
+
+
+_FUND_TYPE_KEYWORDS = [
+    ("货币型", ["货币", "现金", "短债", "理财"]),
+    ("债券型", ["债", "国债", "信用债", "可转债", "利率债", "政金债", "短融"]),
+    ("指数型", ["指数", "联接", "ETF"]),
+    ("混合型", ["混合"]),
+    ("QDII", ["纳斯达克", "纳指", "标普", "道琼斯", "恒生", "港股", "中概", "海外",
+              "德国", "法国", "日本", "亚太", "全球"]),
+]
+
+
+def _guess_fund_type(name: str) -> str:
+    """按基金名称关键词粗分类到开放式基金排行接口的类型参数，默认股票型。"""
+    n = str(name or "")
+    for ftype, kws in _FUND_TYPE_KEYWORDS:
+        if any(k in n for k in kws):
+            return ftype
+    return "股票型"
+
+
+def get_fund_quartile(code: str, name: str) -> dict:
+    """同类四分位排名：该基金近1年收益在同类型基金中的百分位（越小越优）。
+
+    返回 {"fund_type": 类型, "quartile": 1~4, "pct": 名次百分位(0~100,小=优),
+          "rank": 名次, "total": 同类总数, "y1": 近1年收益%}；未匹配或数据缺失返回 {}。
+    """
+    ftype = _guess_fund_type(name)
+    rank = get_open_fund_rank(ftype)
+    if rank is None or rank.empty or "code" not in rank.columns or "y1" not in rank.columns:
+        return {}
+    rank = rank.dropna(subset=["y1"])
+    if rank.empty:
+        return {}
+    rank = rank.sort_values("y1", ascending=False).reset_index(drop=True)
+
+    code_s = rank["code"].astype(str).str.strip()
+    target = str(code).strip()
+    mask = code_s.eq(target)
+    if not mask.any():
+        mask = code_s.str.replace(r"\.0$", "", regex=True).eq(target)
+    if not mask.any():
+        mask = code_s.str.zfill(6).eq(target)
+    if not mask.any():
+        return {}
+
+    idx = int(mask.to_numpy().nonzero()[0][0])
+    total = len(rank)
+    pct = (idx + 1) / total * 100                      # 名次越靠前越小
+    quartile = min(4, int(idx / total * 4) + 1)        # 1=同类前 25%（最优）
+    return {
+        "fund_type": ftype,
+        "quartile": quartile,
+        "pct": round(pct, 1),
+        "rank": idx + 1,
+        "total": total,
+        "y1": round(float(rank.iloc[idx]["y1"]), 2),
+    }
 
 
 def get_open_fund_hist(code: str, indicator: str = "单位净值走势") -> pd.DataFrame:

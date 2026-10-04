@@ -230,6 +230,12 @@ def c_benchmark(name):
     return data.get_benchmark(name)
 
 
+@st.cache_data(ttl=config.CACHE_TTL["long"], show_spinner=False, max_entries=128)
+def c_fund_quartile(code, name):
+    """基金同类四分位排名（近1年收益在同类型中的百分位），长缓存。"""
+    return data.get_fund_quartile(code, name)
+
+
 @st.cache_data(ttl=config.CACHE_TTL["long"], show_spinner=False, max_entries=64)
 def c_fund_pe(code, name):
     """基金跟踪指数的真实 PE-TTM 历史（date, pe），未能解析时返回空。长缓存。"""
@@ -633,6 +639,13 @@ def page_profile():
         if fkey == "otc":
             profile = data.get_fund_profile(code)
             if profile is not None and not profile.empty:
+                q = c_fund_quartile(code, name)
+                if q:
+                    content = (f"{q['fund_type']}同类前 {q['pct']}%（第 {q['quartile']} 分位，"
+                               f"近1年 {q['y1']}%，排名 {q['rank']}/{q['total']}）")
+                    profile = pd.concat(
+                        [profile, pd.DataFrame([{"项目": "同类四分位排名", "内容": content}])],
+                        ignore_index=True)
                 with st.expander(f"基金档案（{name}）", expanded=False):
                     full_table(profile)
 
@@ -678,12 +691,13 @@ def page_profile():
         st.plotly_chart(charts.drawdown_chart(prices), width="stretch")
 
         st.markdown("#### 相对基准走势")
-        bm = c_benchmark("沪深300")
+        bench_name = data.resolve_benchmark(name)
+        bm = c_benchmark(bench_name)
         bm_p = ind.to_price_series(bm).tail(len(prices))
         prices.index = pd.to_datetime(prices.index)
         bm_p.index = pd.to_datetime(bm_p.index)
-        st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], "沪深300": bm_p},
-                                          "基金 vs 沪深300（归一化）"), width="stretch")
+        st.plotly_chart(charts.price_line({"基金": prices[-len(bm_p):], bench_name: bm_p},
+                                          f"基金 vs {bench_name}（归一化）"), width="stretch")
 
     with tabs[2]:  # AI 预测
         mc, _ = c_forecast(code, fkey, name, start, end)
