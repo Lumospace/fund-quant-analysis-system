@@ -98,10 +98,23 @@ def _call_ak(fn, key, ttl=config.CACHE_TTL["normal"], retries=3, allow_stale=Tru
                 _save_cache(key, df)
                 return df
             last = df
-        except Exception as e:
-            # akshare 接口失败形态多样（网络错误、反爬返回 HTML、JS 解析异常等），
-            # 统一捕获降级，避免单个接口异常导致整个页面崩溃。
+        except (_requests.exceptions.RequestException, socket.timeout) as e:
+            # 网络/超时类：可预期，落日志后降级重试
             last = e
+            logger.warning("AKShare 请求失败（第 %d/%d 次）%s: %s",
+                           i + 1, retries, getattr(fn, "__name__", type(fn).__name__), e)
+            time.sleep(0.6 * (i + 1))
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
+            # 数据解析/字段缺失类：上游口径变化，落日志后降级重试
+            last = e
+            logger.warning("AKShare 解析异常（第 %d/%d 次）%s: %s",
+                           i + 1, retries, getattr(fn, "__name__", type(fn).__name__), e)
+            time.sleep(0.6 * (i + 1))
+        except Exception as e:
+            # 兜底：未预期异常同样降级，但记录堆栈便于排查（避免单接口崩溃拖垮页面）
+            last = e
+            logger.warning("AKShare 未知异常（第 %d/%d 次）%s: %s",
+                           i + 1, retries, getattr(fn, "__name__", type(fn).__name__), e, exc_info=True)
             time.sleep(0.6 * (i + 1))
     if not allow_stale:
         return pd.DataFrame()

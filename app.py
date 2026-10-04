@@ -5,6 +5,7 @@
 模块化驾驶舱：顶部导航 + 侧边菜单（含场内/场外全局筛选）+ 卡片主区，全功能页面。
 """
 import datetime as _dt
+import logging
 
 import pandas as pd
 import streamlit as st
@@ -17,6 +18,9 @@ st.set_page_config(page_title="基金投资量化分析系统", page_icon="📊"
                    layout="wide", initial_sidebar_state="expanded")
 
 RISK = config.RISK_DISCLAIMER
+
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
 
 # ==================== 全局状态 & 辅助 ====================
