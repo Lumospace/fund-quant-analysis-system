@@ -709,9 +709,13 @@ def page_profile():
     score = scoring.composite_score(metrics, st.session_state.style)
 
     tab_names = ["概览", "走势与回撤", "AI 预测", "估值与穿透", "因子诊断"]
-    tabs = st.tabs(tab_names)
+    # 用分段选择器替代 st.tabs：仅渲染当前选中视图，未选中视图的图表与计算不执行，
+    # 显著降低切页 / 拖动滚动窗口等交互时的全量重绘开销。
+    tab = st.segmented_control(
+        "视图", tab_names, default="概览", key="prof_tab",
+        label_visibility="collapsed")
 
-    with tabs[0]:  # 概览
+    if tab == "概览":  # 概览
         if fkey == "otc":
             profile = data.get_fund_profile(code)
             if profile is not None and not profile.empty:
@@ -758,7 +762,7 @@ def page_profile():
         st.caption("滚动收益/波动刻画该基金在不同时段收益与波动惯性的变化；"
                    "散点图为滚动子窗口的风险-收益权衡分布，越靠左上越优（高收益低波动）。")
 
-    with tabs[1]:  # 走势与回撤
+    elif tab == "走势与回撤":  # 走势与回撤
         if fkey == "otc":
             _plot(charts.price_line({name: prices}, "净值走势", normalize=False),
                             width="stretch")
@@ -776,7 +780,7 @@ def page_profile():
         _plot(charts.price_line({"基金": prices[-len(bm_p):], bench_label: bm_p},
                                           f"基金 vs {bench_label}（归一化）"), width="stretch")
 
-    with tabs[2]:  # AI 预测
+    elif tab == "AI 预测":  # AI 预测
         mc, _ = c_forecast(code, fkey, name, start, end)
         if mc:
             st.markdown(f"#### {name} 多周期涨跌概率")
@@ -799,7 +803,7 @@ def page_profile():
             for col, (h, r) in zip(cols, mc.items()):
                 with col:
                     col.plotly_chart(charts.probability_gauge(r["prob_up"], f"{h}日上涨概率"),
-                                     width="stretch")
+                                     width="stretch", config=PLOTLY_CONFIG)
 
             st.markdown("#### 拐点与支撑压力")
             t1, t2 = st.columns(2)
@@ -872,7 +876,7 @@ def page_profile():
         else:
             st.warning("AI 预测数据不足，请确保基金有足够的行情数据。")
 
-    with tabs[3]:  # 估值与穿透
+    elif tab == "估值与穿透":  # 估值与穿透
         st.markdown("#### 估值偏离监控")
         _vp_pe = metrics.get("估值分位")
         if _vp_pe is not None:
@@ -919,7 +923,7 @@ def page_profile():
         else:
             st.info("未获取到重仓股数据。")
 
-    with tabs[4]:  # 因子诊断
+    elif tab == "因子诊断":  # 因子诊断
         st.markdown("#### 因子有效性校验（自动淘汰机制）")
         full_table(fval)
 
