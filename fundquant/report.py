@@ -231,7 +231,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
                            forecasts: dict = None, holdings=None,
                            stress: dict = None, strategies=None, dca: dict = None,
                            lookthrough: dict = None, factors=None,
-                           dark: bool = False) -> str:
+                           horizon: str = None, dark: bool = False) -> str:
     score_rows = "".join(
         f"<tr><td>{k}</td><td>{d['weight']*100:.0f}%</td>"
         f"<td>{d['score']:.1f}</td><td>{'; '.join(d['reasons'])}</td></tr>"
@@ -239,6 +239,13 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
     )
     head = (_HTML_HEAD_DARK if dark else _HTML_HEAD).format(title=f"{name} 量化分析报告")
     score_color = "#8BB8E8" if dark else "#1E3A5F"
+    horizon_note = ""
+    if horizon and horizon in config.HORIZON_PROFILES:
+        ph = config.HORIZON_PROFILES[horizon]["pred_horizon"]
+        ph_txt = "、".join(f"{h}日" for h in ph)
+        note_color = "#8BB8E8" if dark else "#475569"
+        horizon_note = (f"<p style='color:{note_color};font-size:13px;margin:2px 0 8px;'>"
+                        f"投资周期：{horizon}（关注未来 {ph_txt} 预测）</p>")
     html = f"""{head}
 <h1>{name}（{code}）量化分析报告</h1>
 <h2>一、基本信息</h2>
@@ -260,6 +267,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 <h2>六、核心指标</h2>
 {metrics_markdown_html(metrics)}
 <h2>七、模型多周期预测</h2>
+{horizon_note}
 <table><tr><th>周期</th><th>上涨概率</th><th>下跌概率</th><th>置信度</th><th>预期收益</th><th>收益区间(10%~90%)</th></tr>{_forecast_rows(forecasts)}</table>
 <h2>八、因子有效性诊断</h2>
 {_factors_section(factors)}

@@ -306,15 +306,16 @@ def c_analysis(code, fkey, name, start, end):
 
 
 @st.cache_data(ttl=config.CACHE_TTL["normal"], show_spinner="正在训练多周期预测模型...", max_entries=64)
-def c_forecast(code, fkey, name, start, end):
-    """模型走势预测的多周期 LightGBM（4 档），缓存加速。"""
+def c_forecast(code, fkey, name, start, end, horizon):
+    """模型走势预测的多周期 LightGBM，预测展望期随投资周期自适应，缓存加速。"""
     hist = data.get_fund_hist(code, fkey, start, end)
     if hist is None or hist.empty:
         return None, None
     prices = ind.to_price_series(hist)
     pe_hist = data.get_fund_pe_history(code, name)
     ff = fac.compute_factor_frame(prices, hist, pe_hist)
-    mc = predict.multi_horizon_forecast(prices, hist, horizons=(7, 20, 60, 120),
+    horizons = config.HORIZON_PROFILES[horizon]["pred_horizon"]
+    mc = predict.multi_horizon_forecast(prices, hist, horizons=horizons,
                                         pe_hist=pe_hist, ff=ff)
     trend = predict.trend_signals(prices)
     return mc, trend
@@ -786,8 +787,11 @@ def page_profile():
                                           f"基金 vs {bench_label}（归一化）"), width="stretch")
 
     elif tab == "模型预测":  # 模型预测
-        mc, _ = c_forecast(code, fkey, name, start, end)
+        mc, _ = c_forecast(code, fkey, name, start, end, st.session_state.horizon)
         if mc:
+            _ph = config.HORIZON_PROFILES[st.session_state.horizon]["pred_horizon"]
+            st.caption(f"当前投资周期：{st.session_state.horizon}，关注未来 "
+                       f"{'、'.join(f'{h}日' for h in _ph)} 的涨跌概率")
             st.markdown(f"#### {name} 多周期涨跌概率")
             rows = []
             for h, r in mc.items():
@@ -1817,7 +1821,7 @@ def page_report():
     metrics["估值状态"] = ind.valuation_status(_vp / 100) if _vp is not None else "数据不足"
     score = scoring.composite_score(metrics, st.session_state.style)
     stress_res = stress.stress_test_fund(prices)
-    mc, trend = c_forecast(code, fkey, name, default_start(), default_end())
+    mc, trend = c_forecast(code, fkey, name, default_start(), default_end(), st.session_state.horizon)
     holdings = c_holdings(code)
     lookthrough = c_lookthrough(code)
     factors = res["fval"]
@@ -1831,7 +1835,7 @@ def page_report():
                                              forecasts=mc, holdings=holdings,
                                              stress=stress_res, strategies=strat_summary,
                                              dca=dca_res, lookthrough=lookthrough,
-                                             factors=factors)
+                                             factors=factors, horizon=st.session_state.horizon)
         st.download_button("下载 HTML 报告", data=html, file_name=f"{code}_report.html",
                            mime="text/html")
         # 内联预览按当前主题深色化；下载版保持浅色，便于打印
@@ -1839,7 +1843,7 @@ def page_report():
                                                 forecasts=mc, holdings=holdings,
                                                 stress=stress_res, strategies=strat_summary,
                                                 dca=dca_res, lookthrough=lookthrough,
-                                                factors=factors,
+                                                factors=factors, horizon=st.session_state.horizon,
                                                 dark=st.session_state.dark_mode)
         st.markdown(preview, unsafe_allow_html=True)
     else:

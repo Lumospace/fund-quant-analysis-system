@@ -227,7 +227,7 @@ def build_snapshot() -> dict:
         "单边交易成本": f"{COST_RATE:.4f}（万2.5）",
         "期望收益收缩强度": EXPECTED_RETURN_SHRINK,
         "过拟合置换次数": PERMUTATION_TEST_ITERS,
-        "预测模型": "LightGBM 多周期（7/20/60/120 日，purged walk-forward）",
+        "预测模型": "LightGBM 多周期（展望期随投资周期自适应，purged walk-forward）",
     }
 
 
