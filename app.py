@@ -68,7 +68,7 @@ def inject_css():
     _sb_ac = C["accent"] if _dark else "#2B6CB0"
     st.markdown(f"""
     <style>
-    .main .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
+    [data-testid="stMain"] .block-container {{padding-top: 1.2rem; max-width: 1440px;}}
     h1,h2,h3,h4,h5,h6 {{color: {C['primary']};}}
     .stApp {{background: {C['bg']};
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
@@ -121,6 +121,15 @@ def inject_css():
     .stApp input, .stApp textarea, .stApp [data-baseweb="input"] input {{color: {C['text']} !important; background: {C['card_bg']} !important;}}
     .stApp [data-baseweb="select"] > div {{background: {C['card_bg']} !important; border-color: {C['card_border']} !important;}}
     .stApp [data-baseweb="select"] span, .stApp [data-baseweb="select"] input {{color: {C['text']} !important;}}
+    /* 文本/数字输入框容器与日期输入字段：深色底 + 亮字（日期字段为自定义容器，非原生 input） */
+    .stApp [data-testid="stTextInputRootElement"],
+    .stApp [data-testid="stNumberInputContainer"],
+    .stApp [data-testid="stDateInputField"] {{
+        background: {C['card_bg']} !important;
+        border-color: {C['card_border']} !important;
+    }}
+    .stApp [data-testid="stDateInputField"],
+    .stApp [data-testid="stDateInputField"] * {{color: {C['text']} !important;}}
     [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
     [data-testid="stExpander"] summary span {{color: {C['text']} !important;}}
     .stApp [data-baseweb="tab"] {{color: {C['text']} !important;}}
@@ -150,24 +159,26 @@ def inject_css():
         color: {C['text']} !important;
     }}
     /* 侧栏导航按钮：深色半透明底 + 亮字；当前项主题色高亮 */
-    [data-testid="stSidebar"] [data-testid="stButton"] > button {{
+    [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
+    [data-testid="stSidebar"] [data-testid="stBaseButton-tertiary"] {{
         color: {C['text']} !important;
         background: rgba(255,255,255,0.07) !important;
         border: 1px solid rgba(255,255,255,0.18) !important;
     }}
-    [data-testid="stSidebar"] [data-testid="stButton"] > button[kind="primary"] {{
+    [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{
         background: {C['primary']} !important;
         color: #0F172A !important;
         border: none !important;
     }}
-    /* 正文区按钮：深底亮文；primary/提交按钮用主题色，避免深色下白底按钮突兀 */
-    .main [data-testid="stButton"] > button[kind="secondary"] {{
+    /* 正文区按钮：深底亮文；primary/提交按钮用主题色，避免深色下白底按钮突兀
+       （覆盖普通 stButton、下载 stDownloadButton、表单提交 stFormSubmitButton 的 stBaseButton 内核） */
+    [data-testid="stMain"] [data-testid="stBaseButton-secondary"],
+    [data-testid="stMain"] [data-testid="stBaseButton-tertiary"] {{
         color: {C['text']} !important;
         background: {C['card_bg']} !important;
         border: 1px solid {C['card_border']} !important;
     }}
-    .main [data-testid="stButton"] > button[kind="primary"],
-    .main [data-testid="stFormSubmitButton"] > button {{
+    [data-testid="stMain"] [data-testid="stBaseButton-primary"] {{
         background: {C['primary']} !important;
         color: #0F172A !important;
         border: none !important;
@@ -1624,7 +1635,12 @@ def page_report():
                                              stress=stress_res)
         st.download_button("下载 HTML 报告", data=html, file_name=f"{code}_report.html",
                            mime="text/html")
-        st.markdown(html, unsafe_allow_html=True)
+        # 内联预览按当前主题深色化；下载版保持浅色，便于打印
+        preview = report.build_fund_report_html(name, code, metrics, score, advice,
+                                                forecasts=mc, holdings=holdings,
+                                                stress=stress_res,
+                                                dark=st.session_state.dark_mode)
+        st.markdown(preview, unsafe_allow_html=True)
     else:
         st.markdown(f"### {name}（{code}）量化分析摘要")
         st.markdown(f"**综合评分 {score['total']}（{score['rating']}，风格 {score['style']}）**")

@@ -25,6 +25,22 @@ th{{background:#1E3A5F;color:#fff}}
 .footer{{margin-top:32px;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px}}
 </style></head><body>"""
 
+# 深色版报告样式：供 App 内联预览在深色模式下嵌入，避免白底表格突兀；
+# 下载导出的报告仍用 _HTML_HEAD（浅色，便于打印）。
+_HTML_HEAD_DARK = """<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>{title}</title>
+<style>
+body{{font-family:'Microsoft YaHei',sans-serif;margin:32px;color:#F1F5F9;background:#0F172A}}
+h1{{color:#8BB8E8}} h2{{color:#8BB8E8;border-bottom:2px solid #8BB8E8;padding-bottom:6px;margin-top:24px}}
+table{{border-collapse:collapse;width:100%;margin:12px 0;background:#1E293B}}
+td,th{{border:1px solid #334155;padding:8px 10px;text-align:left;font-size:13px;color:#F1F5F9}}
+th{{background:#8BB8E8;color:#0F172A}}
+.badge{{display:inline-block;background:#18A058;color:#fff;padding:4px 14px;border-radius:16px;font-size:16px}}
+.warn{{background:#3B1A1A;border-left:4px solid #FC8181;padding:10px 14px;margin:14px 0;color:#F1F5F9}}
+.footer{{margin-top:32px;font-size:12px;color:#94A3B8;border-top:1px solid #334155;padding-top:12px}}
+</style></head><body>"""
+
 _HTML_FOOT = '<div class="footer">本报告由 FundQuant 量化分析系统自动生成，仅供参考，不构成投资建议。</div></body></html>'
 
 
@@ -155,7 +171,7 @@ def _holdings_table(holdings) -> str:
 
 def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
                            advice: dict, forecasts: dict = None, holdings=None,
-                           stress: dict = None) -> str:
+                           stress: dict = None, dark: bool = False) -> str:
     score_rows = "".join(
         f"<tr><td>{k}</td><td>{d['weight']*100:.0f}%</td>"
         f"<td>{d['score']:.1f}</td><td>{'; '.join(d['reasons'])}</td></tr>"
@@ -164,7 +180,9 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
     advice_rows = "".join(
         f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in advice.items()
     )
-    html = f"""{_HTML_HEAD.format(title=f"{name} 量化分析报告")}
+    head = (_HTML_HEAD_DARK if dark else _HTML_HEAD).format(title=f"{name} 量化分析报告")
+    score_color = "#8BB8E8" if dark else "#1E3A5F"
+    html = f"""{head}
 <h1>{name}（{code}）量化分析报告</h1>
 <h2>一、基本信息</h2>
 <table>
@@ -177,7 +195,7 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 <h2>二、重仓股（前十）</h2>
 {_holdings_table(holdings)}
 <h2>三、综合评分</h2>
-<p style="font-size:18px; font-weight:600; color:#1E3A5F; margin:6px 0;">综合评分 {score['total']} · {score['rating']}</p>
+<p style="font-size:18px; font-weight:600; color:{score_color}; margin:6px 0;">综合评分 {score['total']} · {score['rating']}</p>
 <h2>四、四维度评分明细</h2>
 <table><tr><th>维度</th><th>权重</th><th>得分</th><th>打分依据</th></tr>{score_rows}</table>
 <h2>五、核心指标</h2>

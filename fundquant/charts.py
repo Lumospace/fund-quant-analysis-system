@@ -102,9 +102,8 @@ def radar_chart(metrics: dict, title="四维评分雷达"):
     fig = go.Figure(go.Scatterpolar(
         r=vals + [vals[0]], theta=dims + [dims[0]], fill="toself",
         line=dict(color=_pal()["accent"]), name="评分"))
-    fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100], visible=True)),
-                      showlegend=False, height=320, margin=dict(l=50, r=50, t=40, b=40))
-    return fig
+    fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100], visible=True)))
+    return _base(fig, title, height=320, showlegend=False)
 
 
 def radar_overlay(funds: dict, title="多基金评分雷达对比"):
@@ -240,10 +239,8 @@ def probability_gauge(prob_up: float, title="上涨概率"):
         gauge=dict(axis=dict(range=[0, 100]), bar=dict(color=_pal()["accent"]),
                    steps=[dict(range=[0, 50], color=_pal()["down_bg"]),
                           dict(range=[50, 100], color=_pal()["up_bg"])],
-                   threshold=dict(line=dict(color=_pal()["down"], width=3), thickness=0.75, value=50)),
-        title=dict(text=title)))
-    fig.update_layout(height=260, margin=dict(l=40, r=40, t=60, b=20))
-    return fig
+                   threshold=dict(line=dict(color=_pal()["down"], width=3), thickness=0.75, value=50))))
+    return _base(fig, title, height=300, showlegend=False)
 
 
 def corr_heatmap(corr: pd.DataFrame, title="成分相关性矩阵"):
