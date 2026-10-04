@@ -85,7 +85,8 @@ def inject_css():
     [data-testid="stSidebar"] [role="radiogroup"] label p {{color: #ffffff !important;}}
     [data-testid="stSidebar"] [data-baseweb="select"] > div
         {{background:{_sb_bg}; border-radius:8px; border:1px solid {_sb_bd};}}
-    [data-testid="stSidebar"] [data-baseweb="select"] * {{color:{_sb_tx} !important;}}
+    [data-testid="stSidebar"] [data-baseweb="select"] span,
+    [data-testid="stSidebar"] [data-baseweb="select"] input {{color:{_sb_tx} !important;}}
     [data-testid="stSidebar"] [data-baseweb="select"] div[aria-selected="true"] i
         {{color:{_sb_ac} !important;}}
     /* 指标卡片 */
@@ -117,10 +118,9 @@ def inject_css():
     .stApp .st-emotion-cache-1vt4y43, .stApp .st-emotion-cache-15hul6a {{color: {C['text']} !important;}}
     .stApp .stMetric label, .stApp [data-testid="stMetricLabel"] {{color: {C['text_secondary']} !important;}}
     .stApp .stMetric .value, .stApp [data-testid="stMetricValue"] {{color: {C['text']} !important;}}
-    .stApp .stDataFrame, .stApp [data-testid="stTable"] {{color: {C['text']} !important;}}
     .stApp input, .stApp textarea, .stApp [data-baseweb="input"] input {{color: {C['text']} !important; background: {C['card_bg']} !important;}}
     .stApp [data-baseweb="select"] > div {{background: {C['card_bg']} !important; border-color: {C['card_border']} !important;}}
-    .stApp [data-baseweb="select"] * {{color: {C['text']} !important;}}
+    .stApp [data-baseweb="select"] span, .stApp [data-baseweb="select"] input {{color: {C['text']} !important;}}
     [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
     [data-testid="stExpander"] summary span {{color: {C['text']} !important;}}
     .stApp [data-baseweb="tab"] {{color: {C['text']} !important;}}
