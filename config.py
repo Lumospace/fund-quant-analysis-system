@@ -15,6 +15,12 @@ TRADING_DAYS = 252             # 年交易日数
 COST_RATE = 0.00025            # 单边交易成本（万2.5，覆盖申赎费+滑点），组合/再平衡回测换仓时扣除
 EXPECTED_RETURN_SHRINK = 0.5   # 期望收益 James-Stein 收缩强度（0=不收缩,1=完全收缩到截面均值）
 PERMUTATION_TEST_ITERS = 10    # 过拟合置换检验的重标号重训次数（越大越稳但越慢）
+
+# ============ 可复现参数快照（版本 / 随机种子） ============
+DATA_VERSION = CACHE_VERSION   # 数据口径版本（与缓存键版本同步）
+FACTOR_VERSION = "1.0"         # 因子库版本
+MODEL_VERSION = "1.0"          # 预测模型版本
+RANDOM_SEED = 42               # 全局随机种子（模型训练 / 置换检验）
 CACHE_TTL = {
     "spot": 300,           # 实时行情/基金列表 — 5 分钟
     "short": 1200,         # 校准曲线等轻量计算 — 20 分钟
@@ -209,6 +215,20 @@ DARK_COLORS = {
 def get_colors(is_dark: bool = False) -> dict:
     """根据主题返回对应配色字典。"""
     return DARK_COLORS if is_dark else COLORS
+
+
+def build_snapshot() -> dict:
+    """返回可复现参数快照，用于回测/报告绑定，便于日后追溯与重现。"""
+    return {
+        "数据版本": DATA_VERSION,
+        "因子版本": FACTOR_VERSION,
+        "模型版本": MODEL_VERSION,
+        "随机种子": RANDOM_SEED,
+        "单边交易成本": f"{COST_RATE:.4f}（万2.5）",
+        "期望收益收缩强度": EXPECTED_RETURN_SHRINK,
+        "过拟合置换次数": PERMUTATION_TEST_ITERS,
+        "预测模型": "LightGBM 多周期（7/20/60/120 日，purged walk-forward）",
+    }
 
 
 # ============ 合规风险提示 ============

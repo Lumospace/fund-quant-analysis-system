@@ -1740,6 +1740,9 @@ def page_stress(preset_mode=None):
 def page_report():
     st.header("一键量化分析报告")
     st.caption("汇集基金核心指标、AI 预测与持仓穿透，支持 HTML 导出")
+    with st.expander("参数快照（可复现）"):
+        full_table(pd.DataFrame([{"参数": k, "取值": str(v)}
+                                 for k, v in config.build_snapshot().items()]))
     code, name, fkey = cur_fund()
     format_ = st.radio("报告格式", ["HTML", "文本摘要"], horizontal=True)
 
