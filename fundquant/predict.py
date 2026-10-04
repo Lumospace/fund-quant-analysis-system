@@ -53,8 +53,13 @@ def _make_dataset(X_full: pd.DataFrame, prices: pd.Series, horizon: int):
     特征工程只依赖 prices/hist、与 horizon 无关，故 X_full 一次构建后，
     多周期预测只需重复构造标签（未来 horizon 日收益是否为正）。
     """
-    y = ((prices.shift(-horizon) / prices - 1) > 0).astype(int)
-    data = pd.concat([X_full, y.rename("label")], axis=1).dropna()
+    fwd = prices.shift(-horizon) / prices - 1
+    # 未来 horizon 日窗口不足的尾部样本，标签未知，需标为 NaN（而非被 NaN>0 误判为 0），
+    # 供下游训练/评估时剔除；其最新特征行仍需保留，用于最终对未来一点的预测。
+    y = (fwd > 0).astype(float).where(fwd.notna())
+    data = pd.concat([X_full, y.rename("label")], axis=1)
+    # 只剔除特征暖机期的 NaN 行，保留尾部标签为 NaN 的最新样本。
+    data = data[data.drop(columns=["label"]).notna().all(axis=1)]
     if len(data) < 120:
         return None, None
     X = data.drop(columns=["label"]).astype(float)
@@ -114,8 +119,15 @@ def _walk_forward_eval(X: pd.DataFrame, y: pd.Series, horizon: int,
             continue
         purge_end = train_end - horizon - embargo
         tr_slice = slice(0, purge_end) if purge_end >= min_effective else slice(0, train_end)
-        model = _fit_model(X.iloc[tr_slice], y.iloc[tr_slice])
-        probs[train_end:test_end] = model.predict_proba(X.iloc[train_end:test_end])[:, 1]
+        # 训练只用标签已知的样本（剔除尾部未来窗口不足的 NaN 标签），避免喂给模型
+        y_tr = y.iloc[tr_slice]
+        valid_tr = y_tr.notna().to_numpy()
+        model = _fit_model(X.iloc[tr_slice][valid_tr], y_tr[valid_tr])
+        # 测试区间仅对标签已知的行填 OOS 概率，标签 NaN 行保持 NaN（下游掩码自动剔除）
+        seg_pos = np.arange(train_end, test_end)
+        valid_seg = y.iloc[seg_pos].notna().to_numpy()
+        if valid_seg.any():
+            probs[seg_pos[valid_seg]] = model.predict_proba(X.iloc[seg_pos[valid_seg]])[:, 1]
     # 返回最后一个可见训练窗口的终点，供最终预测模型复用（避免全样本重训泄漏未来信息）
     return probs, min_train, int(bounds[-2])
 
@@ -167,7 +179,9 @@ def _train_predict(X: pd.DataFrame, y: pd.Series, prices: pd.Series, horizon: in
             if n_test > 2 and 0 < base_rate < 1 else 0.0
 
         # 最终模型：复用 walk-forward 最后一个可见窗口（截至 last_train_end），预测最新一行
-        model = _fit_model(X.iloc[:last_train_end], y.iloc[:last_train_end])
+        y_last = y.iloc[:last_train_end]
+        v_last = y_last.notna().to_numpy()
+        model = _fit_model(X.iloc[:last_train_end][v_last], y_last[v_last])
         raw_prob = float(model.predict_proba(X.iloc[-1:])[0][1])
         imp = dict(zip(X.columns, model.feature_importances_))
         imp = dict(sorted(imp.items(), key=lambda kv: kv[1], reverse=True)[:8])
@@ -356,6 +370,9 @@ def overfit_report(prices: pd.Series, hist: pd.DataFrame, horizon: int = 20,
     else:
         X_tr, y_tr = X.iloc[:last_train_end], y.iloc[:last_train_end]
     X_te, y_te = X.iloc[last_train_end:], y.iloc[last_train_end:]
+    # 剔除尾部的标签为 NaN 的未来未知样本，避免 NaN 进入 astype(int) 与 AUC 计算
+    v_te = y_te.notna().to_numpy()
+    X_te, y_te = X_te[v_te], y_te[v_te]
 
     # 样本内 AUC（最终模型在其训练窗内的拟合优度）
     model = _fit_model(X_tr, y_tr)
