@@ -441,7 +441,8 @@ def page_dashboard():
 
     etf = c_fund_universe("etf")
     otc_est = c_otc_estimation()
-    otc_all = c_fund_universe("otc")
+    # 场外总数仅需计数：用轻量名单（24h 缓存）替代完整池拉取，避免再次触发估值合并与实时行情重拉
+    otc_all = c_fund_list("otc")
     if st.session_state.pop("_refreshed_at", None):
         st.success(f"实时行情已重新拉取（{_dt.datetime.now():%H:%M:%S}）")
 
