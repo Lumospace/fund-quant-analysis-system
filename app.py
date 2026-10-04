@@ -89,6 +89,22 @@ def inject_css():
     [data-testid="stSidebar"] [data-baseweb="select"] input {{color:{_sb_tx} !important;}}
     [data-testid="stSidebar"] [data-baseweb="select"] div[aria-selected="true"] i
         {{color:{_sb_ac} !important;}}
+    /* 侧栏导航按钮：侧栏两种主题均为深色渐变底，统一用亮字（与"投资风格"等标签一致） */
+    [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
+    [data-testid="stSidebar"] [data-testid="stBaseButton-tertiary"] {{
+        color: #ffffff !important;
+        background: rgba(255,255,255,0.07) !important;
+        border: 1px solid rgba(255,255,255,0.18) !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{
+        background: #ffffff !important;
+        color: #1E3A5F !important;
+        border: none !important;
+    }}
+    /* 侧栏分区标题（如"单基金分析""多基金分析"）：亮字，避免深底上显示不清 */
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong {{
+        color: #ffffff !important;
+    }}
     /* 指标卡片 */
     .metric-card {{background:{C['card_bg']}; border-radius:10px; padding:12px 14px;
         box-shadow:0 1px 4px rgba(30,58,95,.08); border:1px solid {C['card_border']};}}
