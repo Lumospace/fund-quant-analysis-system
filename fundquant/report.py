@@ -220,6 +220,100 @@ def _dca_section(dca: dict) -> str:
     return concl + timing_txt + stop_txt
 
 
+def _conclusion_section(name: str, metrics: dict, score: dict, forecasts: dict = None,
+                        factors=None, stress: dict = None, strategies=None,
+                        dca: dict = None) -> str:
+    """综合分析结论章节：把前文各章结果浓缩为金融小白能读懂的白话要点。"""
+    pts = []
+
+    def _num(v):
+        return v if isinstance(v, (int, float)) else None
+
+    total = score.get("total", "—")
+    rating = score.get("rating", "")
+    style = score.get("style", "")
+    pts.append(
+        f"<li><strong>一句话总结：</strong>{name} 是一只 {style} 风格基金，"
+        f"本系统综合评分 <strong>{total} 分</strong>、评级 <strong>{rating}</strong>；"
+        "分数越高代表过往收益、回撤控制、估值与稳定性的综合表现越好。</li>"
+    )
+
+    ann = _num(metrics.get("年化收益"))
+    y1 = _num(metrics.get("近1年"))
+    if ann is not None and y1 is not None:
+        sense = "赚钱能力较强" if ann >= 10 else ("赚钱能力中等偏下" if ann >= 0 else "历史处于亏损")
+        pts.append(f"<li><strong>收益如何：</strong>年化收益约 {ann}%，近一年 {y1}%，{sense}。</li>")
+
+    mdd = _num(metrics.get("最大回撤"))
+    vol = _num(metrics.get("年化波动率"))
+    if mdd is not None:
+        pts.append(f"<li><strong>会不会大亏：</strong>历史上最惨时一度下跌约 {abs(mdd)}%"
+                   f"{f'，年化波动 {vol}%' if vol is not None else ''}，"
+                   "即最坏情况下需要能扛住这个幅度的浮亏。</li>")
+
+    sharpe = _num(metrics.get("夏普比率"))
+    if sharpe is not None:
+        vibe = "每承担一单位波动换来的收益较高" if sharpe >= 1 else \
+               ("性价比一般" if sharpe >= 0 else "承担波动却没换来正收益，性价比偏低")
+        pts.append(f"<li><strong>划不划算：</strong>夏普比率 {sharpe}，{vibe}。</li>")
+
+    vp = _num(metrics.get("估值分位"))
+    if vp is not None:
+        zone = "估值偏低（相对便宜）" if vp < 30 else ("估值适中" if vp <= 70 else "估值偏高（相对较贵）")
+        pts.append(f"<li><strong>现在贵不贵：</strong>当前估值分位 {vp}%，{zone}，"
+                   "可作定投力度的参考，而非精确择时依据。</li>")
+    else:
+        pts.append("<li><strong>现在贵不贵：</strong>该基金无可解析的真实估值数据，估值维度按中性处理。</li>")
+
+    if forecasts:
+        h, f = sorted(forecasts.items())[0]
+        pu = _num(f.get("prob_up"))
+        conf = _num(f.get("confidence"))
+        if pu is not None:
+            pts.append(f"<li><strong>未来怎么看：</strong>模型预测未来 {h} 个交易日上涨概率约 "
+                       f"{pu*100:.0f}%"
+                       f"{f'（置信度 {conf*100:.0f}%）' if conf is not None else ''}，"
+                       "仅供参考，不代表必然结果。</li>")
+
+    if factors is not None and len(factors):
+        state = factors["状态"].value_counts()
+        valid_n = int(state.get("有效", 0))
+        online_n = int(state.get("有效", 0)) + int(state.get("预警", 0))
+        top_txt = ""
+        valid = factors[factors["状态"] == "有效"]
+        if not valid.empty:
+            t = valid.sort_values("IC", key=lambda s: s.abs(), ascending=False).iloc[0]
+            top_txt = f"，其中最强有效因子为“{t['因子']}”"
+        pts.append(f"<li><strong>模型靠什么判断：</strong>在线因子 {online_n} 个（有效 {valid_n} 个）{top_txt}，"
+                   "预测主要依赖这些因子与历史走势之间的统计关系。</li>")
+
+    if stress:
+        worst = min((_num(v.get("最大回撤")) for v in stress.values()
+                     if _num(v.get("最大回撤")) is not None), default=None)
+        if worst is not None:
+            pts.append(f"<li><strong>极端行情风险：</strong>历史/模拟极端情景下最大回撤约 {abs(worst)}%，"
+                       "请确认自己能承受该幅度缩水。</li>")
+
+    if dca and dca.get("backtest"):
+        b = dca["backtest"]
+        irr = _num(b.get("定投IRR"))
+        if irr is not None:
+            pts.append(f"<li><strong>长期定投效果：</strong>连续定额定投的年化 IRR 约 {irr}%，"
+                       f"累计收益率 {b.get('收益率', '—')}%。</li>")
+        timing = dca.get("timing") or {}
+        if timing.get("建议"):
+            pts.append(f"<li><strong>定投时点：</strong>{timing.get('建议')}。</li>")
+
+    if strategies is not None and not getattr(strategies, "empty", True):
+        sh = strategies[strategies["夏普比率"].notna()]
+        if not sh.empty:
+            b = sh.loc[sh["夏普比率"].idxmax()]
+            pts.append(f"<li><strong>择时策略参考：</strong>历史回测中夏普最优的策略为“{b['策略']}”，"
+                       "但历史回测不代表未来，仅供布局思路参考。</li>")
+
+    return "<ul style='line-height:1.9'>" + "".join(pts) + "</ul>"
+
+
 def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
                            forecasts: dict = None, holdings=None,
                            stress: dict = None, strategies=None, dca: dict = None,
@@ -262,7 +356,9 @@ def build_fund_report_html(name: str, code: str, metrics: dict, score: dict,
 {_strategies_section(strategies)}
 <h2>十一、定投测算</h2>
 {_dca_section(dca)}
-<h2>十二、合规声明</h2>
+<h2>十二、分析结论</h2>
+{_conclusion_section(name, metrics, score, forecasts, factors, stress, strategies, dca)}
+<h2>十三、合规声明</h2>
 <div class="warn">{config.RISK_DISCLAIMER}</div>
 {_HTML_FOOT}"""
     return html
