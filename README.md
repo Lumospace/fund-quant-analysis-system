@@ -4,6 +4,8 @@
 
 > 所有指标、模型参数、评分权重均在 `config.py` 中显式可查、可调，不做黑箱结论。系统仅提供量化分析工具，**不构成投资建议**。
 
+**在线体验**：<https://fund-quant-analysis-system-cz2tevzrrurdkumogkzxs7.streamlit.app/>
+
 ---
 
 ## 一、功能总览
