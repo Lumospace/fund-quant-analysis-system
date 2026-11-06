@@ -1,10 +1,31 @@
 # 基金投资量化分析系统 · FundQuant
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.36%2B-FF4B4B.svg)](https://streamlit.io/)
+[![Live Demo](https://img.shields.io/badge/Demo-Streamlit%20Cloud-FF4B4B?logo=streamlit&logoColor=white)](https://fund-quant-analysis-system-cz2tevzrrurdkumogkzxs7.streamlit.app/)
+
 面向个人投资者的公募基金量化分析工作台。基于 AKShare 公开行情数据，覆盖**基金画像 → 筛选优选 → 横向对比 → 组合优化 → 大类资产配置 → 定投/回测 → 压力测试 → 一键报告**的完整投研链路，界面为 Streamlit 多页应用。
 
-> 所有指标、模型参数、评分权重均在 `config.py` 中显式可查、可调，不做黑箱结论。系统仅提供量化分析工具，**不构成投资建议**。
+**在线演示**：<https://fund-quant-analysis-system-cz2tevzrrurdkumogkzxs7.streamlit.app/>
+（托管于 Streamlit Community Cloud 免费版，应用休眠后首次访问需等待约 30 秒唤醒）
 
-**在线体验**：<https://fund-quant-analysis-system-cz2tevzrrurdkumogkzxs7.streamlit.app/>
+> 所有指标、模型参数、评分权重均在 [config.py](config.py) 中显式可查、可调，不做黑箱结论。
+> 本项目仅提供量化分析工具，**不构成任何投资建议**。
+
+---
+
+## 目录
+
+- [功能总览](#一功能总览)
+- [量化方法](#二量化方法)
+- [快速开始](#三快速开始)
+- [项目结构](#四项目结构)
+- [关键配置](#五关键配置)
+- [测试](#六测试)
+- [自行部署（可选）](#七自行部署可选)
+- [数据来源与免责声明](#八数据来源与免责声明)
+- [许可证](#九许可证)
 
 ---
 
@@ -26,7 +47,7 @@
 
 ---
 
-## 二、量化方法说明
+## 二、量化方法
 
 - **收益与风险指标**：年化收益（按日历日折算）、年化波动率、最大回撤、回撤修复周期、夏普比率、索提诺比率、卡玛比率。
 - **估值分位**：优先使用对应宽基指数的 PE-TTM 历史（乐咕乐股），按研究区间末取分位；无对应指数时降级为价格分位。
@@ -40,17 +61,25 @@
 
 ## 三、快速开始
 
-```bash
-# 1. 安装依赖（建议 Python 3.10+，独立虚拟环境）
-pip install -r requirements.txt
+环境要求：Python 3.10 及以上，可访问公网（用于拉取行情数据）。
 
-# 2. 启动
+```bash
+git clone https://github.com/Lumospace/fund-quant-analysis-system.git
+cd fund-quant-analysis-system
+
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
-浏览器访问终端输出的地址（默认 `http://localhost:8501`）。
+浏览器打开终端输出的地址（默认 `http://localhost:8501`）。
 
-首次运行需联网拉取公开行情数据，数据会缓存到 `.cache/`（已在 `.gitignore` 中排除），二次启动显著加快。
+首次运行需要联网拉取公开行情数据，结果缓存在 `.cache/`（已在 `.gitignore` 中排除），二次启动明显更快。
+
+**常见问题**
+
+- 首次打开页面较慢：正在拉取基金列表与历史行情，属正常现象。
+- 个别基金无数据或指标为空：多为上游接口限流或该基金历史区间过短，稍后重试即可。
+- 想清空本地缓存：删除 `.cache/` 目录后重启即可重建。
 
 ---
 
@@ -103,19 +132,29 @@ python -m pytest tests -q
 
 ---
 
-## 七、部署到 Streamlit Cloud
+## 七、自行部署（可选）
 
-1. 将本仓库推送为 **Public** 仓库。
-2. 访问 [share.streamlit.io](https://share.streamlit.io)，用 GitHub 账号登录并授权。
-3. 点击 **New app**，选择该仓库与分支 `main`，入口文件填写 `app.py`。
-4. 部署完成后获得 `https://<app-name>.streamlit.app` 访问地址。
+本项目已在 Streamlit Community Cloud 上线，无需自行部署。如果你希望部署一份独立副本：
 
-无需额外环境变量；`requirements.txt` 已覆盖全部依赖。
+1. Fork 本仓库（或把代码推到你自己的公开仓库；Community Cloud 免费版要求仓库为 public）。
+2. 打开 <https://share.streamlit.io>，用 GitHub 账号登录并授权。
+3. **New app** → 选择仓库与分支 `main` → **Main file path** 填 `app.py` → **Deploy**。
+4. 构建完成后即可通过分配到的 `https://<app-name>.streamlit.app` 访问。
+
+无需配置环境变量或密钥，`requirements.txt` 已声明全部依赖；首次启动会自动拉取并缓存行情数据。
 
 ---
 
 ## 八、数据来源与免责声明
 
 - 数据来源：AKShare 聚合的东方财富 / 新浪 / 乐咕乐股等公开接口，存在延迟、缺失与接口变更风险。
-- 所有回测结果基于历史数据，**历史表现不代表未来收益**。
+- 所有回测与预测结果基于历史数据，**历史表现不代表未来收益**。
 - 本项目仅供学习与研究使用，不构成任何投资建议；据此操作风险自担。
+
+---
+
+## 九、许可证
+
+代码以 [MIT License](LICENSE) 授权，可自由使用、修改与分发（保留版权声明）。
+
+请注意：**MIT 仅授权代码本身**，不代表对数据准确性、模型输出或任何投资结果作出担保；使用本项目产生的任何投资决策与后果由使用者自行承担。
