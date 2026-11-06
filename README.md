@@ -1,6 +1,6 @@
 # 基金投资量化分析系统 · FundQuant
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: Non-Commercial](https://img.shields.io/badge/license-Non--Commercial-orange.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.36%2B-FF4B4B.svg)](https://streamlit.io/)
 [![Live Demo](https://img.shields.io/badge/Demo-Streamlit%20Cloud-FF4B4B?logo=streamlit&logoColor=white)](https://fund-quant-analysis-system-cz2tevzrrurdkumogkzxs7.streamlit.app/)
@@ -155,6 +155,10 @@ python -m pytest tests -q
 
 ## 九、许可证
 
-代码以 [MIT License](LICENSE) 授权，可自由使用、修改与分发（保留版权声明）。
+本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)，**仅限非商业用途**：
 
-请注意：**MIT 仅授权代码本身**，不代表对数据准确性、模型输出或任何投资结果作出担保；使用本项目产生的任何投资决策与后果由使用者自行承担。
+- **允许**：个人学习与研究、教学、非营利组织（含高校、公益、政府机构）使用；可复制、修改、分发，需保留许可证与版权声明。
+- **禁止**：任何商业用途，包括但不限于企业内部商业项目、SaaS/托管服务对外提供、付费产品集成、商业咨询交付，除非另行获得作者书面授权。
+- 商业授权请联系作者。
+
+另需注意：本许可证仅涉及代码本身，不代表对数据准确性、模型输出或任何投资结果作出担保。
